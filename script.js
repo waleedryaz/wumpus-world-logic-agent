@@ -253,24 +253,36 @@ class WumpusWorld {
         }
     }
 
-    findNextSafeMove() {
-        // First, check immediate neighbors
-        let neighbors = this.getNeighbors(this.agentPos.row, this.agentPos.col);
-        
-        for (let n of neighbors) {
-            let coord = this.coordToString(n.row, n.col);
-            
-            if (this.visited.has(coord)) continue;
-            
-            if (this.isSafe(n.row, n.col)) {
-                return n;
-            }
+findNextSafeMove() {
+    let neighbors = this.getNeighbors(this.agentPos.row, this.agentPos.col);
+
+    // First priority: fully safe cells
+    for (let n of neighbors) {
+        let coord = this.coordToString(n.row, n.col);
+
+        if (this.visited.has(coord)) continue;
+
+        if (this.isSafe(n.row, n.col)) {
+            return n;
         }
-        
-        // If no immediate safe neighbor, use BFS to find path through safe cells
-        return this.findSafeUnvisitedCell();
     }
 
+    // Second priority: cells not marked as possible danger
+    for (let n of neighbors) {
+        let coord = this.coordToString(n.row, n.col);
+
+        if (this.visited.has(coord)) continue;
+
+        if (!this.possiblePits.has(coord) && !this.possibleWumpus.has(coord)) {
+            this.addLog(`⚡ Taking calculated risk at (${n.row}, ${n.col})`, "warning");
+            return n;
+        }
+    }
+
+    // Third priority: BFS safe path
+    return this.findSafeUnvisitedCell();
+}
+    
     isSafe(row, col) {
         let noPit = this.logic.ask(`!P_${row}_${col}`);
         let noWumpus = this.logic.ask(`!W_${row}_${col}`);
