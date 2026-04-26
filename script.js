@@ -1,4 +1,4 @@
-// script.js - Main Wumpus World Application
+// script.js - Main Wumpus World Application (IMPROVED VERSION)
 
 class WumpusWorld {
     constructor() {
@@ -15,9 +15,11 @@ class WumpusWorld {
         this.isRunning = false;
         this.autoRunInterval = null;
         
-        // Track confirmed dangers
+        // Track confirmed and possible dangers
         this.confirmedPits = new Set();
         this.confirmedWumpus = new Set();
+        this.possiblePits = new Set();
+        this.possibleWumpus = new Set();
         
         this.initializeEventListeners();
         this.addLog("Welcome to Wumpus World! Configure grid and click Initialize.", "info");
@@ -34,7 +36,6 @@ class WumpusWorld {
         this.rows = parseInt(document.getElementById('rows').value);
         this.cols = parseInt(document.getElementById('cols').value);
         
-        // Validate
         if (this.rows < 3 || this.rows > 8 || this.cols < 3 || this.cols > 8) {
             alert("Grid size must be between 3x3 and 8x8");
             return;
@@ -51,28 +52,19 @@ class WumpusWorld {
         this.isRunning = false;
         this.confirmedPits = new Set();
         this.confirmedWumpus = new Set();
+        this.possiblePits = new Set();
+        this.possibleWumpus = new Set();
         
-        // Mark starting position as safe and visited
         this.safe.add(this.coordToString(0, 0));
         this.visited.add(this.coordToString(0, 0));
 
-        // Generate hazards
         this.generateHazards();
-        
-        // Create grid
         this.createGrid();
-        
-        // Get initial percepts
         this.updatePercepts();
-        
-        // Add initial knowledge
         this.addInitialKnowledge();
-        
-        // Update UI
         this.updateMetrics();
         this.renderGrid();
         
-        // Enable buttons
         document.getElementById('stepBtn').disabled = false;
         document.getElementById('autoBtn').disabled = false;
         
@@ -81,7 +73,6 @@ class WumpusWorld {
     }
 
     generateHazards() {
-        // Place Wumpus (not at starting position)
         let wumpusPlaced = false;
         while (!wumpusPlaced) {
             let r = Math.floor(Math.random() * this.rows);
@@ -92,9 +83,8 @@ class WumpusWorld {
             }
         }
 
-        // Place Pits (20% of cells, not at starting position or wumpus)
-        let numPits = Math.floor(this.rows * this.cols * 0.15);
-        numPits = Math.max(1, Math.min(numPits, this.rows * this.cols - 2));
+        let numPits = Math.floor(this.rows * this.cols * 0.2);
+        numPits = Math.max(2, Math.min(numPits, this.rows * this.cols - 2));
         
         let pitsPlaced = 0;
         while (pitsPlaced < numPits) {
@@ -174,7 +164,6 @@ class WumpusWorld {
     }
 
     addInitialKnowledge() {
-        // Add knowledge about current position
         this.addKnowledgeForCell(this.agentPos.row, this.agentPos.col);
     }
 
@@ -182,39 +171,54 @@ class WumpusWorld {
         let cell = this.grid[row][col];
         let neighbors = this.getNeighbors(row, col);
         
-        // If breeze, then at least one neighbor has pit
         if (cell.hasBreeze) {
             let breezeVar = `B_${row}_${col}`;
             let pitVars = neighbors.map(n => `P_${n.row}_${n.col}`);
             this.logic.tellBiconditional(breezeVar, pitVars);
-            this.logic.tell([breezeVar]); // We perceive breeze
+            this.logic.tell([breezeVar]);
             
-            this.addLog(`💨 Breeze at (${row}, ${col}) => Pit in neighbors`, "info");
+            // Mark neighbors as possibly dangerous
+            for (let n of neighbors) {
+                let coord = this.coordToString(n.row, n.col);
+                if (!this.visited.has(coord)) {
+                    this.possiblePits.add(coord);
+                }
+            }
+            
+            this.addLog(`💨 Breeze at (${row}, ${col}) => Pit nearby`, "info");
         } else {
-            // No breeze means no pits in neighbors
             for (let n of neighbors) {
                 this.logic.tell([`!P_${n.row}_${n.col}`]);
+                let coord = this.coordToString(n.row, n.col);
+                this.possiblePits.delete(coord);
             }
-            this.addLog(`No Breeze at (${row}, ${col}) => Neighbors are safe from pits`, "info");
+            this.addLog(`No Breeze at (${row}, ${col}) => Neighbors safe from pits`, "info");
         }
 
-        // If stench, then wumpus in one of neighbors
         if (cell.hasStench) {
             let stenchVar = `S_${row}_${col}`;
             let wumpusVars = neighbors.map(n => `W_${n.row}_${n.col}`);
             this.logic.tellBiconditional(stenchVar, wumpusVars);
-            this.logic.tell([stenchVar]); // We perceive stench
+            this.logic.tell([stenchVar]);
             
-            this.addLog(`💀 Stench at (${row}, ${col}) => Wumpus in neighbors`, "info");
+            // Mark neighbors as possibly dangerous
+            for (let n of neighbors) {
+                let coord = this.coordToString(n.row, n.col);
+                if (!this.visited.has(coord)) {
+                    this.possibleWumpus.add(coord);
+                }
+            }
+            
+            this.addLog(`💀 Stench at (${row}, ${col}) => Wumpus nearby`, "info");
         } else {
-            // No stench means no wumpus in neighbors
             for (let n of neighbors) {
                 this.logic.tell([`!W_${n.row}_${n.col}`]);
+                let coord = this.coordToString(n.row, n.col);
+                this.possibleWumpus.delete(coord);
             }
-            this.addLog(`No Stench at (${row}, ${col}) => Neighbors are safe from wumpus`, "info");
+            this.addLog(`No Stench at (${row}, ${col}) => Neighbors safe from wumpus`, "info");
         }
 
-        // Current cell is safe (no pit, no wumpus)
         this.logic.tell([`!P_${row}_${col}`]);
         this.logic.tell([`!W_${row}_${col}`]);
     }
@@ -222,60 +226,73 @@ class WumpusWorld {
     step() {
         if (this.isRunning) return;
 
-        // Find next safe unvisited cell
         let nextMove = this.findNextSafeMove();
         
         if (nextMove) {
             this.moveAgent(nextMove.row, nextMove.col);
         } else {
-            this.addLog("No more safe moves found! Exploration complete or stuck.", "warning");
+            this.addLog("⚠️ No more safe moves! Agent is stuck or exploration complete.", "warning");
+            this.addLog(`Safe cells: ${this.safe.size}, Visited: ${this.visited.size}, Total: ${this.rows * this.cols}`, "info");
+            
+            // Show why agent is stuck
+            let unvisited = [];
+            for (let r = 0; r < this.rows; r++) {
+                for (let c = 0; c < this.cols; c++) {
+                    let coord = this.coordToString(r, c);
+                    if (!this.visited.has(coord)) {
+                        unvisited.push(`(${r},${c})`);
+                    }
+                }
+            }
+            if (unvisited.length > 0) {
+                this.addLog(`⛔ Unvisited cells (might be dangerous): ${unvisited.join(', ')}`, "warning");
+            }
+            
             document.getElementById('stepBtn').disabled = true;
             document.getElementById('autoBtn').disabled = true;
         }
     }
 
     findNextSafeMove() {
+        // First, check immediate neighbors
         let neighbors = this.getNeighbors(this.agentPos.row, this.agentPos.col);
         
         for (let n of neighbors) {
             let coord = this.coordToString(n.row, n.col);
             
-            // Skip if already visited
             if (this.visited.has(coord)) continue;
             
-            // Check if we can prove it's safe
             if (this.isSafe(n.row, n.col)) {
                 return n;
             }
         }
         
-        // If no safe neighbor, try BFS to find safe unvisited cell
+        // If no immediate safe neighbor, use BFS to find path through safe cells
         return this.findSafeUnvisitedCell();
     }
 
     isSafe(row, col) {
-        // Query KB: can we prove NOT Pit AND NOT Wumpus?
         let noPit = this.logic.ask(`!P_${row}_${col}`);
         let noWumpus = this.logic.ask(`!W_${row}_${col}`);
         
         if (noPit && noWumpus) {
             this.safe.add(this.coordToString(row, col));
-            this.addLog(`✅ Proved (${row}, ${col}) is SAFE via resolution (${this.logic.inferenceSteps} steps)`, "success");
+            this.addLog(`✅ Proved (${row}, ${col}) is SAFE (${this.logic.inferenceSteps} inference steps)`, "success");
             return true;
         }
         
+        this.addLog(`❓ Cannot prove (${row}, ${col}) is safe (might be dangerous)`, "warning");
         return false;
     }
 
-    // Check if we can confirm a pit at location
     checkConfirmedPit(row, col) {
-        // Try to prove there IS a pit
         let hasPit = this.logic.ask(`P_${row}_${col}`);
         
         if (hasPit) {
             let coord = this.coordToString(row, col);
             if (!this.confirmedPits.has(coord)) {
                 this.confirmedPits.add(coord);
+                this.possiblePits.delete(coord);
                 this.addLog(`🕳️ CONFIRMED PIT at (${row}, ${col}) via resolution!`, "error");
             }
             return true;
@@ -283,7 +300,6 @@ class WumpusWorld {
         return false;
     }
 
-    // Check if we can confirm wumpus at location
     checkConfirmedWumpus(row, col) {
         let hasWumpus = this.logic.ask(`W_${row}_${col}`);
         
@@ -291,6 +307,7 @@ class WumpusWorld {
             let coord = this.coordToString(row, col);
             if (!this.confirmedWumpus.has(coord)) {
                 this.confirmedWumpus.add(coord);
+                this.possibleWumpus.delete(coord);
                 this.addLog(`👹 CONFIRMED WUMPUS at (${row}, ${col}) via resolution!`, "error");
             }
             return true;
@@ -298,13 +315,11 @@ class WumpusWorld {
         return false;
     }
 
-    // Check all unvisited neighbors for confirmed dangers
     checkForConfirmedDangers() {
         for (let r = 0; r < this.rows; r++) {
             for (let c = 0; c < this.cols; c++) {
                 let coord = this.coordToString(r, c);
                 
-                // Only check unvisited cells
                 if (!this.visited.has(coord) && !this.safe.has(coord)) {
                     this.checkConfirmedPit(r, c);
                     this.checkConfirmedWumpus(r, c);
@@ -314,7 +329,6 @@ class WumpusWorld {
     }
 
     findSafeUnvisitedCell() {
-        // BFS to find path to any safe unvisited cell
         let queue = [this.agentPos];
         let visited = new Set([this.coordToString(this.agentPos.row, this.agentPos.col)]);
         let parent = new Map();
@@ -330,20 +344,16 @@ class WumpusWorld {
                 visited.add(coord);
                 parent.set(coord, current);
                 
-                // If this neighbor is safe and unvisited, return first step
                 if (this.safe.has(coord) && !this.visited.has(coord)) {
-                    // Backtrack to find first step
                     let path = [n];
                     let p = n;
                     while (parent.has(this.coordToString(p.row, p.col))) {
                         p = parent.get(this.coordToString(p.row, p.col));
                         path.unshift(p);
                     }
-                    // Return first step (neighbor of current position)
                     return path[1] || n;
                 }
                 
-                // Only continue through visited safe cells
                 if (this.visited.has(coord)) {
                     queue.push(n);
                 }
@@ -358,18 +368,17 @@ class WumpusWorld {
         this.visited.add(this.coordToString(row, col));
         this.safe.add(this.coordToString(row, col));
         
+        // Remove from possible dangers
+        let coord = this.coordToString(row, col);
+        this.possiblePits.delete(coord);
+        this.possibleWumpus.delete(coord);
+        
         this.addLog(`🤖 Agent moved to (${row}, ${col})`, "success");
         
-        // Update percepts
         this.updatePercepts();
-        
-        // Add knowledge from new position
         this.addKnowledgeForCell(row, col);
-        
-        // After adding knowledge, check if we can confirm any dangers
         this.checkForConfirmedDangers();
         
-        // Update UI
         this.updateMetrics();
         this.renderGrid();
     }
@@ -388,11 +397,10 @@ class WumpusWorld {
             this.autoRunInterval = setInterval(() => {
                 this.step();
                 
-                // Stop if no more moves
                 if (document.getElementById('stepBtn').disabled) {
                     this.toggleAutoRun();
                 }
-            }, 1000);
+            }, 1200);
         }
     }
 
@@ -409,7 +417,6 @@ class WumpusWorld {
         document.getElementById('confirmedPits').textContent = this.confirmedPits.size;
         document.getElementById('confirmedWumpus').textContent = this.confirmedWumpus.size;
         
-        // Update KB display
         let kbText = this.logic.getRecentClauses(15);
         document.getElementById('kbContent').textContent = kbText || "No clauses yet";
     }
@@ -435,13 +442,13 @@ class WumpusWorld {
         let coord = this.coordToString(row, col);
         let cellData = this.grid[row][col];
         
-        // Add coordinate label
+        // Coordinate label
         let coordLabel = document.createElement('div');
         coordLabel.className = 'cell-coord';
         coordLabel.textContent = `${row},${col}`;
         div.appendChild(coordLabel);
         
-        // Check if this is a confirmed danger
+        // Determine cell status and styling
         if (this.confirmedPits.has(coord)) {
             div.classList.add('pit');
             let pitIcon = document.createElement('div');
@@ -455,14 +462,21 @@ class WumpusWorld {
             wumpusIcon.textContent = '👹';
             div.appendChild(wumpusIcon);
         } else if (this.visited.has(coord)) {
-            // Visited and safe
             div.classList.add('safe');
         } else if (this.safe.has(coord)) {
-            // Proven safe but not visited yet
             div.classList.add('safe');
-            div.style.opacity = '0.7'; // Slightly dimmed
+            div.style.opacity = '0.7';
+        } else if (this.possiblePits.has(coord) || this.possibleWumpus.has(coord)) {
+            // Show possible dangers with warning color
+            div.classList.add('unknown');
+            div.style.background = 'linear-gradient(135deg, #fbd38d 0%, #f6ad55 100%)';
+            div.style.borderColor = '#ed8936';
+            
+            let warningIcon = document.createElement('div');
+            warningIcon.style.fontSize = '24px';
+            warningIcon.textContent = '⚠️';
+            div.appendChild(warningIcon);
         } else {
-            // Unknown
             div.classList.add('unknown');
         }
         
@@ -514,6 +528,8 @@ class WumpusWorld {
         this.isRunning = false;
         this.confirmedPits = new Set();
         this.confirmedWumpus = new Set();
+        this.possiblePits = new Set();
+        this.possibleWumpus = new Set();
         
         document.getElementById('gridContainer').innerHTML = '<p style="text-align:center;color:#999;">Initialize grid to start</p>';
         document.getElementById('stepBtn').disabled = true;
