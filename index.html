@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wumpus World Logic Agent</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 Wumpus World - Knowledge-Based Agent</h1>
+        
+        <!-- Control Panel -->
+        <div class="control-panel">
+            <div class="input-group">
+                <label>Rows:</label>
+                <input type="number" id="rows" value="4" min="3" max="8">
+            </div>
+            <div class="input-group">
+                <label>Columns:</label>
+                <input type="number" id="cols" value="4" min="3" max="8">
+            </div>
+            <button id="initBtn" class="btn btn-primary">Initialize Grid</button>
+            <button id="stepBtn" class="btn btn-secondary" disabled>Next Step</button>
+            <button id="autoBtn" class="btn btn-success" disabled>Auto Run</button>
+            <button id="resetBtn" class="btn btn-danger">Reset</button>
+        </div>
+
+        <!-- Metrics Dashboard -->
+        <div class="metrics">
+            <div class="metric-card">
+                <h3>Inference Steps</h3>
+                <div id="inferenceSteps" class="metric-value">0</div>
+            </div>
+            <div class="metric-card">
+                <h3>Current Percepts</h3>
+                <div id="percepts" class="metric-value">None</div>
+            </div>
+            <div class="metric-card">
+                <h3>Agent Position</h3>
+                <div id="agentPos" class="metric-value">(0, 0)</div>
+            </div>
+            <div class="metric-card">
+                <h3>Safe Cells Found</h3>
+                <div id="safeCells" class="metric-value">1</div>
+            </div>
+        </div>
+
+        <!-- Grid Container -->
+        <div id="gridContainer" class="grid-container">
+            <!-- Grid will be generated here -->
+        </div>
+
+        <!-- Knowledge Base Display -->
+        <div class="kb-display">
+            <h3>📚 Knowledge Base (Recent Clauses)</h3>
+            <div id="kbContent" class="kb-content">
+                Waiting for initialization...
+            </div>
+        </div>
+
+        <!-- Legend -->
+        <div class="legend">
+            <h3>Legend:</h3>
+            <div class="legend-items">
+                <div class="legend-item">
+                    <div class="legend-box agent"></div>
+                    <span>Agent</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-box safe"></div>
+                    <span>Safe (Visited)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-box unknown"></div>
+                    <span>Unknown</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-box pit"></div>
+                    <span>Pit (Confirmed)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-box wumpus"></div>
+                    <span>Wumpus (Confirmed)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-box breeze"></div>
+                    <span>💨 Breeze</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-box stench"></div>
+                    <span>💀 Stench</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Log Display -->
+        <div class="log-display">
+            <h3>📋 Agent Log</h3>
+            <div id="logContent" class="log-content"></div>
+        </div>
+    </div>
+
+    <script src="logic.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
