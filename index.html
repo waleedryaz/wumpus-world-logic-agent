@@ -42,13 +42,21 @@
             </div>
             <div class="metric-card">
                 <h3>Safe Cells Found</h3>
-                <div id="safeCells" class="metric-value">1</div>
+                <div id="safeCells" class="metric-value">0</div>
+            </div>
+            <div class="metric-card danger-pit">
+                <h3>🕳️ Confirmed Pits</h3>
+                <div id="confirmedPits" class="metric-value">0</div>
+            </div>
+            <div class="metric-card danger-wumpus">
+                <h3>👹 Confirmed Wumpus</h3>
+                <div id="confirmedWumpus" class="metric-value">0</div>
             </div>
         </div>
 
         <!-- Grid Container -->
         <div id="gridContainer" class="grid-container">
-            <!-- Grid will be generated here -->
+            <p style="text-align:center;color:#999;">Initialize grid to start</p>
         </div>
 
         <!-- Knowledge Base Display -->
@@ -65,31 +73,31 @@
             <div class="legend-items">
                 <div class="legend-item">
                     <div class="legend-box agent"></div>
-                    <span>Agent</span>
+                    <span>Agent (Current Position)</span>
                 </div>
                 <div class="legend-item">
                     <div class="legend-box safe"></div>
-                    <span>Safe (Visited)</span>
+                    <span>Safe (Visited/Proven)</span>
                 </div>
                 <div class="legend-item">
                     <div class="legend-box unknown"></div>
-                    <span>Unknown</span>
+                    <span>Unknown (Unexplored)</span>
                 </div>
                 <div class="legend-item">
                     <div class="legend-box pit"></div>
-                    <span>Pit (Confirmed)</span>
+                    <span>Confirmed Pit (Proven Danger)</span>
                 </div>
                 <div class="legend-item">
                     <div class="legend-box wumpus"></div>
-                    <span>Wumpus (Confirmed)</span>
+                    <span>Confirmed Wumpus (Proven Danger)</span>
                 </div>
                 <div class="legend-item">
-                    <div class="legend-box breeze"></div>
-                    <span>💨 Breeze</span>
+                    <span style="font-size: 24px;">💨</span>
+                    <span>Breeze (Pit Nearby)</span>
                 </div>
                 <div class="legend-item">
-                    <div class="legend-box stench"></div>
-                    <span>💀 Stench</span>
+                    <span style="font-size: 24px;">💀</span>
+                    <span>Stench (Wumpus Nearby)</span>
                 </div>
             </div>
         </div>
