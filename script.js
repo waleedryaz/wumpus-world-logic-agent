@@ -1,4 +1,4 @@
-// script.js - Enhanced Wumpus World Application with Gold Collection (FIXED)
+// script.js - Fixed Wumpus World with Correct Movement in All Directions
 
 class WumpusWorld {
     constructor() {
@@ -16,13 +16,11 @@ class WumpusWorld {
         this.isRunning = false;
         this.autoRunInterval = null;
         
-        // Track dangers
         this.confirmedPits = new Set();
         this.confirmedWumpus = new Set();
         this.possiblePits = new Set();
         this.possibleWumpus = new Set();
         
-        // Game state
         this.hasGold = false;
         this.gameOver = false;
         this.debugMode = false;
@@ -42,7 +40,7 @@ class WumpusWorld {
             this.debugMode = e.target.checked;
             if (this.grid.length > 0) {
                 this.renderGrid();
-                this.addLog(this.debugMode ? "🔍 Debug mode enabled - Hazards visible" : "🔍 Debug mode disabled", "info");
+                this.addLog(this.debugMode ? "🔍 Debug mode enabled" : "🔍 Debug mode disabled", "info");
             }
         });
     }
@@ -56,7 +54,6 @@ class WumpusWorld {
             return;
         }
 
-        // Reset everything
         this.grid = [];
         this.agentPos = { row: 0, col: 0 };
         this.visited = new Set();
@@ -87,16 +84,15 @@ class WumpusWorld {
         
         document.getElementById('stepBtn').disabled = false;
         document.getElementById('autoBtn').disabled = false;
-        
         document.getElementById('statusBanner').classList.add('hidden');
         
         this.addLog(`🎲 World initialized: ${this.rows}x${this.cols} grid`, "success");
         this.addLog(`🤖 Agent spawned at (0, 0)`, "info");
-        this.addLog(`🎯 Objective: Find the gold and return safely!`, "info");
+        this.addLog(`🎯 Objective: Find gold and return safely!`, "info");
     }
 
     generateHazards() {
-        // Place Wumpus (not at starting position)
+        // Place Wumpus
         let wumpusPlaced = false;
         while (!wumpusPlaced) {
             let r = Math.floor(Math.random() * this.rows);
@@ -107,7 +103,7 @@ class WumpusWorld {
             }
         }
 
-        // Place Pits (20% of cells)
+        // Place Pits
         let numPits = Math.floor(this.rows * this.cols * 0.2);
         numPits = Math.max(2, Math.min(numPits, this.rows * this.cols - 3));
         
@@ -125,7 +121,7 @@ class WumpusWorld {
             }
         }
 
-        // Place Gold (safe location, not too close to start)
+        // Place Gold
         let goldPlaced = false;
         while (!goldPlaced) {
             let r = Math.floor(Math.random() * this.rows);
@@ -141,9 +137,7 @@ class WumpusWorld {
             }
         }
 
-        this.addLog(`👹 Wumpus placed at hidden location`, "warning");
-        this.addLog(`🕳️ ${numPits} pits placed at hidden locations`, "warning");
-        this.addLog(`💰 Gold placed at hidden location`, "warning");
+        this.addLog(`👹 Wumpus hidden | 🕳️ ${numPits} pits hidden | 💰 Gold hidden`, "warning");
     }
 
     createGrid() {
@@ -188,16 +182,11 @@ class WumpusWorld {
 
     getNeighbors(row, col) {
         let neighbors = [];
-        let directions = [[-1, 0], [1, 0], [0, -1], [0, 1]]; // Up, Down, Left, Right
-        
-        for (let [dr, dc] of directions) {
-            let newRow = row + dr;
-            let newCol = col + dc;
-            if (newRow >= 0 && newRow < this.rows && newCol >= 0 && newCol < this.cols) {
-                neighbors.push({ row: newRow, col: newCol });
-            }
-        }
-        
+        // All 4 directions: up, down, left, right
+        if (row > 0) neighbors.push({ row: row - 1, col: col }); // Up
+        if (row < this.rows - 1) neighbors.push({ row: row + 1, col: col }); // Down
+        if (col > 0) neighbors.push({ row: row, col: col - 1 }); // Left
+        if (col < this.cols - 1) neighbors.push({ row: row, col: col + 1 }); // Right
         return neighbors;
     }
 
@@ -207,11 +196,9 @@ class WumpusWorld {
         this.percepts.stench = cell.hasStench;
         this.percepts.glitter = cell.hasGlitter;
         
-        // Check for gold
         if (cell.hasGold && !this.hasGold) {
             this.hasGold = true;
             this.addLog(`💰 GOLD FOUND at (${this.agentPos.row}, ${this.agentPos.col})!`, "success");
-            this.addLog(`🏠 New objective: Return to starting position (0, 0)`, "info");
             this.showStatus("🎉 Gold Collected! Return to (0,0) to win!", "success");
         }
     }
@@ -236,15 +223,13 @@ class WumpusWorld {
                     this.possiblePits.add(coord);
                 }
             }
-            
-            this.addLog(`💨 Breeze detected at (${row}, ${col}) - Pit in adjacent cells`, "warning");
+            this.addLog(`💨 Breeze at (${row},${col})`, "warning");
         } else {
             for (let n of neighbors) {
                 this.logic.tell([`!P_${n.row}_${n.col}`]);
-                let coord = this.coordToString(n.row, n.col);
-                this.possiblePits.delete(coord);
+                this.possiblePits.delete(this.coordToString(n.row, n.col));
             }
-            this.addLog(`✓ No breeze at (${row}, ${col}) - Adjacent cells safe from pits`, "success");
+            this.addLog(`✓ No breeze at (${row},${col})`, "success");
         }
 
         if (cell.hasStench) {
@@ -259,19 +244,17 @@ class WumpusWorld {
                     this.possibleWumpus.add(coord);
                 }
             }
-            
-            this.addLog(`💀 Stench detected at (${row}, ${col}) - Wumpus in adjacent cells`, "warning");
+            this.addLog(`💀 Stench at (${row},${col})`, "warning");
         } else {
             for (let n of neighbors) {
                 this.logic.tell([`!W_${n.row}_${n.col}`]);
-                let coord = this.coordToString(n.row, n.col);
-                this.possibleWumpus.delete(coord);
+                this.possibleWumpus.delete(this.coordToString(n.row, n.col));
             }
-            this.addLog(`✓ No stench at (${row}, ${col}) - Adjacent cells safe from wumpus`, "success");
+            this.addLog(`✓ No stench at (${row},${col})`, "success");
         }
 
         if (cell.hasGlitter) {
-            this.addLog(`✨ Glitter detected at (${row}, ${col}) - GOLD IS HERE!`, "success");
+            this.addLog(`✨ Glitter at (${row},${col})!`, "success");
         }
 
         this.logic.tell([`!P_${row}_${col}`]);
@@ -279,11 +262,11 @@ class WumpusWorld {
     }
 
     step() {
-        if (this.isRunning || this.gameOver) return;
+        if (this.gameOver) return;
 
         this.moveCount++;
 
-        // Check if we won (has gold and at starting position)
+        // Check win condition
         if (this.hasGold && this.agentPos.row === 0 && this.agentPos.col === 0) {
             this.winGame();
             return;
@@ -291,17 +274,14 @@ class WumpusWorld {
 
         let nextMove = null;
 
-        // If we have gold, prioritize returning to start
+        // If has gold, return to start
         if (this.hasGold) {
             nextMove = this.findPathToStart();
-            if (nextMove) {
-                this.addLog(`🏠 Returning to start with gold...`, "info");
-            }
         }
 
-        // If no path to start or don't have gold yet, explore
+        // Otherwise explore
         if (!nextMove) {
-            nextMove = this.findNextSafeMove();
+            nextMove = this.findNextMove();
         }
 
         if (nextMove) {
@@ -312,169 +292,130 @@ class WumpusWorld {
     }
 
     findPathToStart() {
-        // BFS to find path back to (0, 0)
         if (this.agentPos.row === 0 && this.agentPos.col === 0) return null;
 
-        let queue = [this.agentPos];
-        let visitedBFS = new Set([this.coordToString(this.agentPos.row, this.agentPos.col)]);
-        let parent = new Map();
+        let queue = [[this.agentPos]];
+        let visited = new Set([this.coordToString(this.agentPos.row, this.agentPos.col)]);
 
         while (queue.length > 0) {
-            let current = queue.shift();
-
-            // Found start!
-            if (current.row === 0 && current.col === 0) {
-                // Backtrack to find first step
-                let p = current;
-                let prev = null;
-                while (parent.has(this.coordToString(p.row, p.col))) {
-                    prev = p;
-                    p = parent.get(this.coordToString(p.row, p.col));
-                }
-                return prev; // Return first step towards start
-            }
+            let path = queue.shift();
+            let current = path[path.length - 1];
 
             let neighbors = this.getNeighbors(current.row, current.col);
-
             for (let n of neighbors) {
                 let coord = this.coordToString(n.row, n.col);
+                
+                if (visited.has(coord)) continue;
+                visited.add(coord);
 
-                if (visitedBFS.has(coord)) continue;
-                visitedBFS.add(coord);
-                parent.set(coord, current);
+                let newPath = [...path, n];
 
-                // Only move through visited safe cells
-                if (this.visited.has(coord) || this.safe.has(coord)) {
-                    queue.push(n);
+                // Found start!
+                if (n.row === 0 && n.col === 0) {
+                    return newPath[1]; // Return first step
+                }
+
+                // Only traverse safe visited cells
+                if (this.visited.has(coord)) {
+                    queue.push(newPath);
                 }
             }
         }
-
-        return null; // No path found
+        return null;
     }
 
-    findNextSafeMove() {
-        // FIXED: First check ALL immediate neighbors before using BFS
+    findNextMove() {
+        // Step 1: Check all immediate unvisited neighbors
         let neighbors = this.getNeighbors(this.agentPos.row, this.agentPos.col);
         
-        // Try to find a safe unvisited neighbor
         for (let n of neighbors) {
             let coord = this.coordToString(n.row, n.col);
             
-            // Skip if already visited
+            // Skip visited
             if (this.visited.has(coord)) continue;
             
-            // Try to prove this neighbor is safe
-            if (this.isSafe(n.row, n.col)) {
-                this.addLog(`→ Moving to adjacent safe cell (${n.row}, ${n.col})`, "info");
+            // Skip confirmed dangers
+            if (this.confirmedPits.has(coord) || this.confirmedWumpus.has(coord)) {
+                continue;
+            }
+            
+            // Try to prove safe
+            if (this.canProveSafe(n.row, n.col)) {
+                this.addLog(`→ Moving to safe neighbor (${n.row},${n.col})`, "info");
                 return n;
             }
         }
         
-        // If no immediate safe neighbor, use BFS to find any reachable safe cell
-        return this.findSafeUnvisitedCellBFS();
+        // Step 2: Find path to any safe unvisited cell
+        let queue = [[this.agentPos]];
+        let visited = new Set([this.coordToString(this.agentPos.row, this.agentPos.col)]);
+
+        while (queue.length > 0) {
+            let path = queue.shift();
+            let current = path[path.length - 1];
+
+            let neighbors = this.getNeighbors(current.row, current.col);
+            for (let n of neighbors) {
+                let coord = this.coordToString(n.row, n.col);
+                
+                if (visited.has(coord)) continue;
+                visited.add(coord);
+
+                let newPath = [...path, n];
+
+                // Found safe unvisited target!
+                if (this.safe.has(coord) && !this.visited.has(coord)) {
+                    this.addLog(`→ Navigating to (${n.row},${n.col}) via path`, "info");
+                    return newPath[1]; // Return first step
+                }
+
+                // Only traverse visited cells
+                if (this.visited.has(coord)) {
+                    queue.push(newPath);
+                }
+            }
+        }
+
+        return null;
     }
 
-    isSafe(row, col) {
+    canProveSafe(row, col) {
         let coord = this.coordToString(row, col);
         
-        // If already confirmed dangerous, not safe
+        // Already proven safe
+        if (this.safe.has(coord)) return true;
+        
+        // Already confirmed dangerous
         if (this.confirmedPits.has(coord) || this.confirmedWumpus.has(coord)) {
             return false;
         }
         
-        // Query KB: can we prove NOT Pit AND NOT Wumpus?
+        // Try to prove using logic
         let noPit = this.logic.ask(`!P_${row}_${col}`);
         let noWumpus = this.logic.ask(`!W_${row}_${col}`);
         
         if (noPit && noWumpus) {
             this.safe.add(coord);
-            this.addLog(`✅ Proved (${row}, ${col}) is SAFE using ${this.logic.inferenceSteps} inference steps`, "success");
+            this.addLog(`✅ Proved (${row},${col}) is safe (${this.logic.inferenceSteps} steps)`, "success");
             return true;
         }
         
-        this.addLog(`❓ Cannot prove (${row}, ${col}) is safe - Avoiding`, "warning");
-        return false;
-    }
-
-    checkConfirmedPit(row, col) {
+        // Check if we can prove it's dangerous
         let hasPit = this.logic.ask(`P_${row}_${col}`);
-        
-        if (hasPit) {
-            let coord = this.coordToString(row, col);
-            if (!this.confirmedPits.has(coord)) {
-                this.confirmedPits.add(coord);
-                this.possiblePits.delete(coord);
-                this.addLog(`🕳️ CONFIRMED: Pit exists at (${row}, ${col})`, "error");
-            }
-            return true;
+        if (hasPit && !this.confirmedPits.has(coord)) {
+            this.confirmedPits.add(coord);
+            this.possiblePits.delete(coord);
+            this.addLog(`🕳️ Proved pit at (${row},${col})`, "error");
         }
-        return false;
-    }
-
-    checkConfirmedWumpus(row, col) {
+        
         let hasWumpus = this.logic.ask(`W_${row}_${col}`);
-        
-        if (hasWumpus) {
-            let coord = this.coordToString(row, col);
-            if (!this.confirmedWumpus.has(coord)) {
-                this.confirmedWumpus.add(coord);
-                this.possibleWumpus.delete(coord);
-                this.addLog(`👹 CONFIRMED: Wumpus exists at (${row}, ${col})`, "error");
-            }
-            return true;
+        if (hasWumpus && !this.confirmedWumpus.has(coord)) {
+            this.confirmedWumpus.add(coord);
+            this.possibleWumpus.delete(coord);
+            this.addLog(`👹 Proved wumpus at (${row},${col})`, "error");
         }
+        
         return false;
-    }
-
-    checkForConfirmedDangers() {
-        // Check all unvisited cells that might be dangerous
-        for (let r = 0; r < this.rows; r++) {
-            for (let c = 0; c < this.cols; c++) {
-                let coord = this.coordToString(r, c);
-                
-                if (!this.visited.has(coord) && !this.safe.has(coord)) {
-                    this.checkConfirmedPit(r, c);
-                    this.checkConfirmedWumpus(r, c);
-                }
-            }
-        }
-    }
-
-    findSafeUnvisitedCellBFS() {
-        // FIXED: Use proper BFS to find path to any safe unvisited cell
-        let queue = [{pos: this.agentPos, path: []}];
-        let visitedBFS = new Set([this.coordToString(this.agentPos.row, this.agentPos.col)]);
-        
-        while (queue.length > 0) {
-            let {pos, path} = queue.shift();
-            let neighbors = this.getNeighbors(pos.row, pos.col);
-            
-            for (let n of neighbors) {
-                let coord = this.coordToString(n.row, n.col);
-                
-                if (visitedBFS.has(coord)) continue;
-                visitedBFS.add(coord);
-                
-                let newPath = [...path, n];
-                
-                // If this neighbor is safe and unvisited, we found a target!
-                if (this.safe.has(coord) && !this.visited.has(coord)) {
-                    // Return the FIRST step in the path
-                    if (newPath.length > 0) {
-                        this.addLog(`→ Navigating to safe cell (${n.row}, ${n.col}) via path`, "info");
-                        return newPath[0];
-                    }
-                }
-                
-                // Continue BFS only through visited safe cells
-                if (this.visited.has(coord)) {
-                    queue.push({pos: n, path: newPath});
-                }
-            }
-        }
-        
-        return null;
     }
 
     moveAgent(row, col) {
@@ -486,11 +427,10 @@ class WumpusWorld {
         this.possiblePits.delete(coord);
         this.possibleWumpus.delete(coord);
         
-        this.addLog(`🤖 Agent moved to (${row}, ${col})`, "info");
+        this.addLog(`🤖 Moved to (${row},${col})`, "info");
         
         this.updatePercepts();
         this.addKnowledgeForCell(row, col);
-        this.checkForConfirmedDangers();
         
         this.updateMetrics();
         this.renderGrid();
@@ -498,37 +438,13 @@ class WumpusWorld {
 
     stuckAgent() {
         this.gameOver = true;
-        this.addLog(`⛔ AGENT STUCK: No safe moves available!`, "error");
-        this.addLog(`📊 Final Stats: Moves: ${this.moveCount}, Explored: ${this.visited.size}/${this.rows * this.cols} cells`, "info");
-        
-        let unvisitedDangerous = [];
-        let unvisitedUnknown = [];
-        
-        for (let r = 0; r < this.rows; r++) {
-            for (let c = 0; c < this.cols; c++) {
-                let coord = this.coordToString(r, c);
-                if (!this.visited.has(coord)) {
-                    if (this.possiblePits.has(coord) || this.possibleWumpus.has(coord) || 
-                        this.confirmedPits.has(coord) || this.confirmedWumpus.has(coord)) {
-                        unvisitedDangerous.push(`(${r},${c})`);
-                    } else {
-                        unvisitedUnknown.push(`(${r},${c})`);
-                    }
-                }
-            }
-        }
-        
-        if (unvisitedDangerous.length > 0) {
-            this.addLog(`⚠️ Dangerous cells (cannot prove safe): ${unvisitedDangerous.join(', ')}`, "warning");
-        }
-        if (unvisitedUnknown.length > 0) {
-            this.addLog(`❓ Unknown cells (unreachable): ${unvisitedUnknown.join(', ')}`, "info");
-        }
+        this.addLog(`⛔ STUCK! No safe moves.`, "error");
+        this.addLog(`📊 Moves: ${this.moveCount} | Explored: ${this.visited.size}/${this.rows * this.cols}`, "info");
         
         if (!this.hasGold) {
-            this.showStatus(`💔 Game Over - Agent Stuck! Gold not found. Explored ${this.visited.size}/${this.rows * this.cols} cells`, "warning");
+            this.showStatus(`💔 Game Over - Stuck! Explored ${this.visited.size}/${this.rows * this.cols} cells`, "warning");
         } else {
-            this.showStatus(`😢 Game Over - Agent Stuck with Gold! Couldn't return to start.`, "warning");
+            this.showStatus(`😢 Game Over - Stuck with gold!`, "warning");
         }
         
         document.getElementById('stepBtn').disabled = true;
@@ -537,23 +453,18 @@ class WumpusWorld {
 
     winGame() {
         this.gameOver = true;
-        this.addLog(`🎉 VICTORY! Agent returned with GOLD!`, "success");
-        this.addLog(`📊 Stats: Moves: ${this.moveCount}, Cells Explored: ${this.visited.size}/${this.rows * this.cols}`, "success");
-        this.addLog(`🧠 Total Inference Steps: ${this.logic.inferenceSteps}`, "success");
+        this.addLog(`🎉 VICTORY! Returned with gold!`, "success");
+        this.addLog(`📊 Moves: ${this.moveCount} | Explored: ${this.visited.size}/${this.rows * this.cols}`, "success");
         
         let efficiency = ((this.visited.size / (this.rows * this.cols)) * 100).toFixed(1);
-        this.showStatus(`🏆 MISSION COMPLETE! Gold retrieved in ${this.moveCount} moves! (${efficiency}% explored)`, "success");
+        this.showStatus(`🏆 COMPLETE! Gold in ${this.moveCount} moves (${efficiency}% explored)`, "success");
         
         document.getElementById('stepBtn').disabled = true;
         document.getElementById('autoBtn').disabled = true;
-        
-        // Celebration animation
         this.celebrateWin();
     }
 
     celebrateWin() {
-        // Add confetti effect
-        let container = document.querySelector('.container');
         for (let i = 0; i < 30; i++) {
             setTimeout(() => {
                 let confetti = document.createElement('div');
@@ -566,7 +477,6 @@ class WumpusWorld {
                 confetti.style.pointerEvents = 'none';
                 confetti.style.animation = 'fall 4s linear forwards';
                 document.body.appendChild(confetti);
-                
                 setTimeout(() => confetti.remove(), 4000);
             }, i * 150);
         }
@@ -608,9 +518,7 @@ class WumpusWorld {
         document.getElementById('confirmedWumpus').textContent = this.confirmedWumpus.size;
         
         let goldStatus = this.hasGold ? "🏆 Collected!" : "🔍 Searching...";
-        if (this.hasGold && this.agentPos.row === 0 && this.agentPos.col === 0) {
-            goldStatus = "🎉 Secured!";
-        }
+        if (this.hasGold && this.agentPos.row === 0 && this.agentPos.col === 0) goldStatus = "🎉 Secured!";
         document.getElementById('goldStatus').textContent = goldStatus;
         
         let explorationPercent = ((this.visited.size / (this.rows * this.cols)) * 100).toFixed(1);
@@ -632,8 +540,7 @@ class WumpusWorld {
         
         for (let r = 0; r < this.rows; r++) {
             for (let c = 0; c < this.cols; c++) {
-                let cell = this.createCellElement(r, c);
-                container.appendChild(cell);
+                container.appendChild(this.createCellElement(r, c));
             }
         }
     }
@@ -645,13 +552,13 @@ class WumpusWorld {
         let coord = this.coordToString(row, col);
         let cellData = this.grid[row][col];
         
-        // Coordinate label
+        // Coordinate
         let coordLabel = document.createElement('div');
         coordLabel.className = 'cell-coord';
         coordLabel.textContent = `${row},${col}`;
         div.appendChild(coordLabel);
         
-        // Debug mode - show actual hazards with striped pattern
+        // Debug mode
         if (this.debugMode && !this.visited.has(coord)) {
             if (cellData.hasPit) {
                 div.style.background = 'repeating-linear-gradient(45deg, #fecaca, #fecaca 10px, #fca5a5 10px, #fca5a5 20px)';
@@ -664,7 +571,7 @@ class WumpusWorld {
             }
         }
         
-        // Determine cell status
+        // Cell status
         if (this.confirmedPits.has(coord)) {
             div.classList.add('pit');
             let icon = document.createElement('div');
@@ -698,7 +605,7 @@ class WumpusWorld {
             div.classList.add('unknown');
         }
         
-        // Show percepts if visited
+        // Percepts
         if (this.visited.has(coord)) {
             let perceptDiv = document.createElement('div');
             perceptDiv.className = 'percept-icons';
@@ -708,11 +615,9 @@ class WumpusWorld {
             if (perceptDiv.textContent) div.appendChild(perceptDiv);
         }
         
-        // Show agent
+        // Agent
         if (row === this.agentPos.row && col === this.agentPos.col) {
             div.classList.add('agent');
-            
-            // Show gold on agent if collected
             if (this.hasGold) {
                 let goldBadge = document.createElement('div');
                 goldBadge.style.position = 'absolute';
@@ -736,16 +641,11 @@ class WumpusWorld {
     showStatus(message, type) {
         let banner = document.getElementById('statusBanner');
         let text = banner.querySelector('.status-text');
-        
         banner.className = 'status-banner ' + type;
         text.textContent = message;
         banner.classList.remove('hidden');
-        
-        // Auto-hide after 5 seconds for non-critical messages
         if (type === 'info') {
-            setTimeout(() => {
-                banner.classList.add('hidden');
-            }, 5000);
+            setTimeout(() => banner.classList.add('hidden'), 5000);
         }
     }
 
@@ -757,8 +657,6 @@ class WumpusWorld {
         entry.textContent = `[${timestamp}] ${message}`;
         logContent.appendChild(entry);
         logContent.scrollTop = logContent.scrollHeight;
-        
-        // Keep only last 100 entries
         while (logContent.children.length > 100) {
             logContent.removeChild(logContent.firstChild);
         }
@@ -770,9 +668,7 @@ class WumpusWorld {
     }
 
     reset() {
-        if (this.autoRunInterval) {
-            clearInterval(this.autoRunInterval);
-        }
+        if (this.autoRunInterval) clearInterval(this.autoRunInterval);
         
         this.rows = 5;
         this.cols = 5;
@@ -793,8 +689,7 @@ class WumpusWorld {
         this.gameOver = false;
         this.moveCount = 0;
         
-        let container = document.getElementById('gridContainer');
-        container.innerHTML = `
+        document.getElementById('gridContainer').innerHTML = `
             <div class="empty-state">
                 <div class="empty-icon">🎮</div>
                 <h3>Ready to Explore!</h3>
@@ -805,7 +700,6 @@ class WumpusWorld {
         document.getElementById('stepBtn').disabled = true;
         document.getElementById('autoBtn').disabled = true;
         document.getElementById('autoBtn').innerHTML = '<span class="btn-icon">▶️</span> Auto Run';
-        
         document.getElementById('inferenceSteps').textContent = '0';
         document.getElementById('percepts').textContent = 'None';
         document.getElementById('agentPos').textContent = '(0, 0)';
@@ -821,11 +715,10 @@ class WumpusWorld {
         document.getElementById('logContent').innerHTML = '';
         document.getElementById('statusBanner').classList.add('hidden');
         
-        this.addLog("🔄 System reset - Ready for new adventure!", "info");
+        this.addLog("🔄 System reset - Ready!", "info");
     }
 }
 
-// Add CSS for confetti animation
 const style = document.createElement('style');
 style.textContent = `
     @keyframes fall {
@@ -837,5 +730,4 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-// Initialize the application
 let world = new WumpusWorld();
