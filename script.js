@@ -1,654 +1,629 @@
-// script.js - PROPER Knowledge-Based Agent Implementation
+/* ============================================================
+   SCRIPT.JS — Wumpus World Game Engine + UI
+   ============================================================ */
+"use strict";
 
-class WumpusWorld {
-    constructor() {
-        this.rows = 5;
-        this.cols = 5;
-        this.grid = [];
-        this.agentPos = { row: 0, col: 0 };
-        this.visited = new Set();
-        this.safe = new Set();
-        this.pits = new Set();
-        this.wumpusPos = null;
-        this.goldPos = null;
-        this.percepts = { breeze: false, stench: false, glitter: false };
-        this.logic = new LogicEngine();
-        this.isRunning = false;
-        this.autoRunInterval = null;
-        
-        this.confirmedPits = new Set();
-        this.confirmedWumpus = new Set();
-        this.possiblePits = new Set();
-        this.possibleWumpus = new Set();
-        
-        this.hasGold = false;
-        this.gameOver = false;
-        this.debugMode = false;
-        this.moveCount = 0;
-        
-        this.initializeEventListeners();
-        this.addLog("🎮 Welcome! Enable debug mode to see hazards, then initialize.", "info");
-    }
+/* ── DOM References ── */
+const gridContainer    = document.getElementById("gridContainer");
+const btnNew           = document.getElementById("btnNew");
+const btnStep          = document.getElementById("btnStep");
+const btnAuto          = document.getElementById("btnAuto");
+const btnStop          = document.getElementById("btnStop");
+const btnReset         = document.getElementById("btnReset");
+const rowsInput        = document.getElementById("rowsInput");
+const colsInput        = document.getElementById("colsInput");
+const pitCountInput    = document.getElementById("pitCountInput");
+const speedInput       = document.getElementById("speedInput");
+const statusBox        = document.getElementById("statusBox");
+const perceptDisplay   = document.getElementById("perceptDisplay");
+const kbLog            = document.getElementById("kbLog");
+const kbViewer         = document.getElementById("kbViewer");
+const metricInference  = document.getElementById("metricInference");
+const metricVisited    = document.getElementById("metricVisited");
+const metricSafe       = document.getElementById("metricSafe");
+const metricSteps      = document.getElementById("metricSteps");
+const metricClauses    = document.getElementById("metricClauses");
+const metricResult     = document.getElementById("metricResult");
 
-    initializeEventListeners() {
-        document.getElementById('initBtn').addEventListener('click', () => this.initialize());
-        document.getElementById('stepBtn').addEventListener('click', () => this.step());
-        document.getElementById('autoBtn').addEventListener('click', () => this.toggleAutoRun());
-        document.getElementById('resetBtn').addEventListener('click', () => this.reset());
-        document.getElementById('clearLog').addEventListener('click', () => this.clearLog());
-        document.getElementById('debugMode').addEventListener('change', (e) => {
-            this.debugMode = e.target.checked;
-            if (this.grid.length > 0) {
-                this.renderGrid();
-            }
-        });
-    }
+/* ── Game State ── */
+let ROWS, COLS, PIT_COUNT;
+let grid          = [];   // 2D array of cell objects
+let agentRow      = 0;
+let agentCol      = 0;
+let agentAlive    = false;
+let gameOver      = false;
+let goldCollected = false;
+let autoTimer     = null;
+let agentSteps    = 0;
+let safeCellsProven = 0;
 
-    initialize() {
-        this.rows = parseInt(document.getElementById('rows').value);
-        this.cols = parseInt(document.getElementById('cols').value);
-        
-        if (this.rows < 4 || this.rows > 8 || this.cols < 4 || this.cols > 8) {
-            alert("Grid must be 4x4 to 8x8");
-            return;
-        }
+const kb = new KnowledgeBase();
 
-        this.grid = [];
-        this.agentPos = { row: 0, col: 0 };
-        this.visited = new Set();
-        this.safe = new Set();
-        this.pits = new Set();
-        this.wumpusPos = null;
-        this.goldPos = null;
-        this.logic.reset();
-        this.isRunning = false;
-        this.confirmedPits = new Set();
-        this.confirmedWumpus = new Set();
-        this.possiblePits = new Set();
-        this.possibleWumpus = new Set();
-        this.hasGold = false;
-        this.gameOver = false;
-        this.moveCount = 0;
-        
-        // Start position is safe
-        this.safe.add("0,0");
-        this.visited.add("0,0");
+/* ── Cell Object ──
+   {
+     hasPit:    bool,  hasWumpus: bool,  hasGold: bool,
+     visited:   bool,  safe:      bool,  inferred: bool,
+     percepts:  { breeze, stench, glitter },
+     row, col
+   }
+*/
 
-        this.generateHazards();
-        this.createGrid();
-        this.updatePercepts();
-        this.processCurrentCell();
-        this.updateMetrics();
-        this.renderGrid();
-        
-        document.getElementById('stepBtn').disabled = false;
-        document.getElementById('autoBtn').disabled = false;
-        document.getElementById('statusBanner').classList.add('hidden');
-        
-        this.addLog(`🎲 ${this.rows}x${this.cols} world created`, "success");
-        this.addLog(`🤖 Agent at (0,0) - Starting exploration`, "info");
-    }
+/* ════════════════════════════════════════
+   INITIALISATION
+   ════════════════════════════════════════ */
+function initGame() {
+  ROWS      = clamp(parseInt(rowsInput.value)    || 4, 3, 8);
+  COLS      = clamp(parseInt(colsInput.value)    || 4, 3, 8);
+  PIT_COUNT = clamp(parseInt(pitCountInput.value)|| 3, 1, Math.floor(ROWS*COLS*0.4));
 
-    generateHazards() {
-        // Wumpus - at least 2 cells away from start
-        let validPositions = [];
-        for (let r = 0; r < this.rows; r++) {
-            for (let c = 0; c < this.cols; c++) {
-                if (Math.abs(r) + Math.abs(c) >= 2) {
-                    validPositions.push({row: r, col: c});
-                }
-            }
-        }
-        this.wumpusPos = validPositions[Math.floor(Math.random() * validPositions.length)];
+  rowsInput.value    = ROWS;
+  colsInput.value    = COLS;
+  pitCountInput.value = PIT_COUNT;
 
-        // Pits - 15-20% of grid
-        let numPits = Math.floor(this.rows * this.cols * 0.18);
-        let pitsPlaced = 0;
-        while (pitsPlaced < numPits) {
-            let r = Math.floor(Math.random() * this.rows);
-            let c = Math.floor(Math.random() * this.cols);
-            let coord = `${r},${c}`;
-            
-            if ((r === 0 && c === 0)) continue;
-            if (r === this.wumpusPos.row && c === this.wumpusPos.col) continue;
-            if (this.pits.has(coord)) continue;
-            
-            this.pits.add(coord);
-            pitsPlaced++;
-        }
+  agentRow      = 0;
+  agentCol      = 0;
+  agentAlive    = true;
+  gameOver      = false;
+  goldCollected = false;
+  agentSteps    = 0;
+  safeCellsProven = 0;
 
-        // Gold - safe location
-        let goldPlaced = false;
-        while (!goldPlaced) {
-            let r = Math.floor(Math.random() * this.rows);
-            let c = Math.floor(Math.random() * this.cols);
-            let coord = `${r},${c}`;
-            
-            if (r === 0 && c === 0) continue;
-            if (r === this.wumpusPos.row && c === this.wumpusPos.col) continue;
-            if (this.pits.has(coord)) continue;
-            
-            this.goldPos = {row: r, col: c};
-            goldPlaced = true;
-        }
+  kb.reset();
+  buildGrid();
+  placeHazards();
+  computePercepts();
 
-        this.addLog(`Hidden: Wumpus, ${numPits} pits, 1 gold`, "warning");
-    }
+  // Agent starts at (0,0) — always safe, no pit or wumpus placed there
+  grid[0][0].safe    = true;
+  grid[0][0].visited = false; // will be set on first step
 
-    createGrid() {
-        this.grid = [];
-        for (let r = 0; r < this.rows; r++) {
-            let row = [];
-            for (let c = 0; c < this.cols; c++) {
-                row.push({
-                    row: r,
-                    col: c,
-                    hasBreeze: this.checkAdjacentPit(r, c),
-                    hasStench: this.checkAdjacentWumpus(r, c),
-                    hasGlitter: (r === this.goldPos.row && c === this.goldPos.col),
-                    hasPit: this.pits.has(`${r},${c}`),
-                    hasWumpus: (r === this.wumpusPos.row && c === this.wumpusPos.col),
-                    hasGold: (r === this.goldPos.row && c === this.goldPos.col)
-                });
-            }
-            this.grid.push(row);
-        }
-    }
+  // Tell KB that (0,0) is safe
+  kb.tell(neg(atom("P_0_0")));
+  kb.tell(neg(atom("W_0_0")));
 
-    checkAdjacentPit(row, col) {
-        let neighbors = this.getNeighbors(row, col);
-        return neighbors.some(n => this.pits.has(`${n.row},${n.col}`));
-    }
-
-    checkAdjacentWumpus(row, col) {
-        let neighbors = this.getNeighbors(row, col);
-        return neighbors.some(n => n.row === this.wumpusPos.row && n.col === this.wumpusPos.col);
-    }
-
-    getNeighbors(row, col) {
-        let neighbors = [];
-        if (row > 0) neighbors.push({row: row - 1, col: col});
-        if (row < this.rows - 1) neighbors.push({row: row + 1, col: col});
-        if (col > 0) neighbors.push({row: row, col: col - 1});
-        if (col < this.cols - 1) neighbors.push({row: row, col: col + 1});
-        return neighbors;
-    }
-
-    updatePercepts() {
-        let cell = this.grid[this.agentPos.row][this.agentPos.col];
-        this.percepts.breeze = cell.hasBreeze;
-        this.percepts.stench = cell.hasStench;
-        this.percepts.glitter = cell.hasGlitter;
-        
-        if (cell.hasGold && !this.hasGold) {
-            this.hasGold = true;
-            this.addLog(`💰 GOLD COLLECTED at (${this.agentPos.row},${this.agentPos.col})!`, "success");
-            this.showStatus("🎉 Gold found! Return to (0,0)", "success");
-        }
-    }
-
-    processCurrentCell() {
-        let r = this.agentPos.row;
-        let c = this.agentPos.col;
-        let cell = this.grid[r][c];
-        let neighbors = this.getNeighbors(r, c);
-        
-        // Tell KB this cell is safe
-        this.logic.tell([`!P_${r}_${c}`]);
-        this.logic.tell([`!W_${r}_${c}`]);
-        
-        if (cell.hasBreeze) {
-            // Breeze means at least one neighbor has pit
-            let pitVars = neighbors.map(n => `P_${n.row}_${n.col}`);
-            let breezeVar = `B_${r}_${c}`;
-            
-            // B ⇔ (P1 ∨ P2 ∨ P3 ∨ P4)
-            this.logic.tellBiconditional(breezeVar, pitVars);
-            this.logic.tell([breezeVar]);
-            
-            // Mark neighbors as possibly dangerous
-            neighbors.forEach(n => {
-                let coord = `${n.row},${n.col}`;
-                if (!this.visited.has(coord)) {
-                    this.possiblePits.add(coord);
-                }
-            });
-            
-            this.addLog(`💨 Breeze at (${r},${c})`, "warning");
-        } else {
-            // No breeze = all neighbors safe from pits
-            neighbors.forEach(n => {
-                this.logic.tell([`!P_${n.row}_${n.col}`]);
-                this.possiblePits.delete(`${n.row},${n.col}`);
-            });
-            this.addLog(`✓ No breeze - neighbors safe from pits`, "success");
-        }
-
-        if (cell.hasStench) {
-            let wumpusVars = neighbors.map(n => `W_${n.row}_${n.col}`);
-            let stenchVar = `S_${r}_${c}`;
-            
-            this.logic.tellBiconditional(stenchVar, wumpusVars);
-            this.logic.tell([stenchVar]);
-            
-            neighbors.forEach(n => {
-                let coord = `${n.row},${n.col}`;
-                if (!this.visited.has(coord)) {
-                    this.possibleWumpus.add(coord);
-                }
-            });
-            
-            this.addLog(`💀 Stench at (${r},${c})`, "warning");
-        } else {
-            neighbors.forEach(n => {
-                this.logic.tell([`!W_${n.row}_${n.col}`]);
-                this.possibleWumpus.delete(`${n.row},${n.col}`);
-            });
-            this.addLog(`✓ No stench - neighbors safe from wumpus`, "success");
-        }
-
-        // Now infer safety of all unvisited cells
-        this.inferSafety();
-    }
-
-    inferSafety() {
-        // Check all unvisited cells to see if we can prove them safe or dangerous
-        for (let r = 0; r < this.rows; r++) {
-            for (let c = 0; c < this.cols; c++) {
-                let coord = `${r},${c}`;
-                if (this.visited.has(coord)) continue;
-                
-                // Try to prove safe
-                let noPit = this.logic.ask(`!P_${r}_${c}`);
-                let noWumpus = this.logic.ask(`!W_${r}_${c}`);
-                
-                if (noPit && noWumpus) {
-                    if (!this.safe.has(coord)) {
-                        this.safe.add(coord);
-                        this.addLog(`✅ Inferred (${r},${c}) is SAFE`, "success");
-                    }
-                    this.possiblePits.delete(coord);
-                    this.possibleWumpus.delete(coord);
-                }
-                
-                // Try to prove dangerous
-                let hasPit = this.logic.ask(`P_${r}_${c}`);
-                if (hasPit && !this.confirmedPits.has(coord)) {
-                    this.confirmedPits.add(coord);
-                    this.possiblePits.delete(coord);
-                    this.safe.delete(coord);
-                    this.addLog(`🕳️ Inferred PIT at (${r},${c})`, "error");
-                }
-                
-                let hasWumpus = this.logic.ask(`W_${r}_${c}`);
-                if (hasWumpus && !this.confirmedWumpus.has(coord)) {
-                    this.confirmedWumpus.add(coord);
-                    this.possibleWumpus.delete(coord);
-                    this.safe.delete(coord);
-                    this.addLog(`👹 Inferred WUMPUS at (${r},${c})`, "error");
-                }
-            }
-        }
-    }
-
-    step() {
-        if (this.gameOver) return;
-
-        this.moveCount++;
-
-        // Win condition
-        if (this.hasGold && this.agentPos.row === 0 && this.agentPos.col === 0) {
-            this.winGame();
-            return;
-        }
-
-        let nextMove = null;
-
-        // Priority 1: If we have gold, return home
-        if (this.hasGold) {
-            nextMove = this.findPathTo(0, 0);
-            if (nextMove) {
-                this.addLog(`🏠 Returning home with gold`, "info");
-            }
-        } 
-        // Priority 2: If we see gold, go get it
-        else if (this.percepts.glitter) {
-            // Already on gold, collect it
-            this.hasGold = true;
-        }
-        // Priority 3: Explore safe unvisited cells
-        else {
-            nextMove = this.findSafeUnvisitedCell();
-        }
-
-        if (nextMove) {
-            this.moveToCell(nextMove.row, nextMove.col);
-        } else {
-            this.handleStuck();
-        }
-    }
-
-    findSafeUnvisitedCell() {
-        // Get all safe unvisited cells
-        let safeUnvisited = [];
-        for (let r = 0; r < this.rows; r++) {
-            for (let c = 0; c < this.cols; c++) {
-                let coord = `${r},${c}`;
-                if (this.safe.has(coord) && !this.visited.has(coord)) {
-                    safeUnvisited.push({row: r, col: c});
-                }
-            }
-        }
-
-        if (safeUnvisited.length === 0) {
-            return null;
-        }
-
-        // Find closest one using BFS
-        let closest = null;
-        let shortestPath = null;
-
-        for (let target of safeUnvisited) {
-            let path = this.findPathTo(target.row, target.col);
-            if (path && (!shortestPath || path.distance < shortestPath.distance)) {
-                closest = target;
-                shortestPath = path;
-            }
-        }
-
-        return shortestPath;
-    }
-
-    findPathTo(targetRow, targetCol) {
-        // BFS to find path from current position to target
-        let queue = [{pos: this.agentPos, path: [], distance: 0}];
-        let visited = new Set([`${this.agentPos.row},${this.agentPos.col}`]);
-
-        while (queue.length > 0) {
-            let {pos, path, distance} = queue.shift();
-
-            // Found target
-            if (pos.row === targetRow && pos.col === targetCol) {
-                if (path.length > 0) {
-                    return {row: path[0].row, col: path[0].col, distance: distance};
-                }
-                return null; // Already at target
-            }
-
-            let neighbors = this.getNeighbors(pos.row, pos.col);
-            for (let n of neighbors) {
-                let coord = `${n.row},${n.col}`;
-                if (visited.has(coord)) continue;
-                
-                // Can only traverse visited OR safe cells
-                if (!this.visited.has(coord) && !this.safe.has(coord)) continue;
-                
-                visited.add(coord);
-                let newPath = path.length === 0 ? [n] : path;
-                queue.push({pos: n, path: newPath, distance: distance + 1});
-            }
-        }
-
-        return null; // No path found
-    }
-
-    moveToCell(row, col) {
-        this.agentPos = {row, col};
-        let coord = `${row},${col}`;
-        
-        this.visited.add(coord);
-        this.safe.add(coord);
-        this.possiblePits.delete(coord);
-        this.possibleWumpus.delete(coord);
-        
-        this.addLog(`🤖 Moved to (${row},${col})`, "info");
-        
-        this.updatePercepts();
-        this.processCurrentCell();
-        this.updateMetrics();
-        this.renderGrid();
-    }
-
-    handleStuck() {
-        this.gameOver = true;
-        
-        let safeCount = 0;
-        let dangerCount = 0;
-        let unknownCount = 0;
-        
-        for (let r = 0; r < this.rows; r++) {
-            for (let c = 0; c < this.cols; c++) {
-                let coord = `${r},${c}`;
-                if (this.visited.has(coord)) continue;
-                
-                if (this.confirmedPits.has(coord) || this.confirmedWumpus.has(coord)) {
-                    dangerCount++;
-                } else if (this.safe.has(coord)) {
-                    safeCount++;
-                } else {
-                    unknownCount++;
-                }
-            }
-        }
-        
-        this.addLog(`⛔ STUCK! Safe unvisited: ${safeCount}, Dangerous: ${dangerCount}, Unknown: ${unknownCount}`, "error");
-        
-        if (!this.hasGold) {
-            this.showStatus(`💔 Agent stuck - Gold not found (${this.visited.size}/${this.rows*this.cols} explored)`, "warning");
-        } else {
-            this.showStatus(`😢 Agent stuck with gold - Cannot return`, "warning");
-        }
-        
-        document.getElementById('stepBtn').disabled = true;
-        document.getElementById('autoBtn').disabled = true;
-    }
-
-    winGame() {
-        this.gameOver = true;
-        let efficiency = ((this.visited.size / (this.rows * this.cols)) * 100).toFixed(1);
-        
-        this.addLog(`🎉 VICTORY! Gold secured!`, "success");
-        this.addLog(`📊 Moves: ${this.moveCount}, Explored: ${efficiency}%`, "success");
-        
-        this.showStatus(`🏆 Mission Complete! ${this.moveCount} moves, ${efficiency}% explored`, "success");
-        
-        document.getElementById('stepBtn').disabled = true;
-        document.getElementById('autoBtn').disabled = true;
-        
-        this.celebrateWin();
-    }
-
-    celebrateWin() {
-        for (let i = 0; i < 30; i++) {
-            setTimeout(() => {
-                let confetti = document.createElement('div');
-                confetti.textContent = ['🎉','🎊','⭐','✨','🏆','💰'][Math.floor(Math.random()*6)];
-                confetti.style.cssText = `position:fixed;left:${Math.random()*100}%;top:-50px;font-size:40px;z-index:9999;pointer-events:none;animation:fall 4s linear forwards`;
-                document.body.appendChild(confetti);
-                setTimeout(() => confetti.remove(), 4000);
-            }, i * 150);
-        }
-    }
-
-    toggleAutoRun() {
-        if (this.isRunning) {
-            clearInterval(this.autoRunInterval);
-            this.isRunning = false;
-            document.getElementById('autoBtn').innerHTML = '<span class="btn-icon">▶️</span> Auto Run';
-            document.getElementById('stepBtn').disabled = false;
-        } else {
-            this.isRunning = true;
-            document.getElementById('autoBtn').innerHTML = '<span class="btn-icon">⏸️</span> Stop';
-            document.getElementById('stepBtn').disabled = true;
-            
-            this.autoRunInterval = setInterval(() => {
-                if (this.gameOver) {
-                    this.toggleAutoRun();
-                    return;
-                }
-                this.step();
-            }, 800);
-        }
-    }
-
-    updateMetrics() {
-        document.getElementById('inferenceSteps').textContent = this.logic.inferenceSteps.toLocaleString();
-        
-        let perceptText = [];
-        if (this.percepts.breeze) perceptText.push("💨");
-        if (this.percepts.stench) perceptText.push("💀");
-        if (this.percepts.glitter) perceptText.push("✨");
-        document.getElementById('percepts').textContent = perceptText.join(" ") || "None";
-        
-        document.getElementById('agentPos').textContent = `(${this.agentPos.row},${this.agentPos.col})`;
-        document.getElementById('safeCells').textContent = this.safe.size;
-        document.getElementById('confirmedPits').textContent = this.confirmedPits.size;
-        document.getElementById('confirmedWumpus').textContent = this.confirmedWumpus.size;
-        document.getElementById('goldStatus').textContent = this.hasGold ? "🏆 Collected" : "🔍 Searching";
-        
-        let progress = ((this.visited.size / (this.rows * this.cols)) * 100).toFixed(1);
-        document.getElementById('explorationProgress').textContent = `${progress}%`;
-        document.getElementById('gridSize').textContent = `${this.rows}×${this.cols}`;
-        document.getElementById('cellsExplored').textContent = `${this.visited.size}/${this.rows*this.cols}`;
-        
-        let kbText = this.logic.getRecentClauses(20);
-        document.getElementById('kbContent').textContent = kbText || "Empty";
-        document.getElementById('kbSize').textContent = `${this.logic.getKBSize()} clauses`;
-    }
-
-    renderGrid() {
-        let container = document.getElementById('gridContainer');
-        container.innerHTML = '';
-        container.style.gridTemplateColumns = `repeat(${this.cols}, 90px)`;
-        
-        for (let r = 0; r < this.rows; r++) {
-            for (let c = 0; c < this.cols; c++) {
-                container.appendChild(this.createCell(r, c));
-            }
-        }
-    }
-
-    createCell(r, c) {
-        let div = document.createElement('div');
-        div.className = 'cell';
-        let coord = `${r},${c}`;
-        let cell = this.grid[r][c];
-        
-        // Coordinate
-        let label = document.createElement('div');
-        label.className = 'cell-coord';
-        label.textContent = `${r},${c}`;
-        div.appendChild(label);
-        
-        // Debug mode - show hidden hazards
-        if (this.debugMode && !this.visited.has(coord)) {
-            if (cell.hasPit) {
-                div.style.background = 'repeating-linear-gradient(45deg,#fca5a5,#fca5a5 10px,#f87171 10px,#f87171 20px)';
-            }
-            if (cell.hasWumpus) {
-                div.style.background = 'repeating-linear-gradient(45deg,#c4b5fd,#c4b5fd 10px,#a78bfa 10px,#a78bfa 20px)';
-            }
-            if (cell.hasGold) {
-                div.style.background = 'repeating-linear-gradient(45deg,#fde68a,#fde68a 10px,#fcd34d 10px,#fcd34d 20px)';
-            }
-        }
-        
-        // Cell state
-        if (this.confirmedPits.has(coord)) {
-            div.classList.add('pit');
-            div.innerHTML += '<div class="cell-content">🕳️</div>';
-        } else if (this.confirmedWumpus.has(coord)) {
-            div.classList.add('wumpus');
-            div.innerHTML += '<div class="cell-content">👹</div>';
-        } else if (this.visited.has(coord)) {
-            div.classList.add('safe');
-            if (cell.hasGold && !this.hasGold) {
-                div.innerHTML += '<div class="cell-content">💰</div>';
-            }
-        } else if (this.safe.has(coord)) {
-            div.classList.add('safe');
-            div.style.opacity = '0.6';
-        } else if (this.possiblePits.has(coord) || this.possibleWumpus.has(coord)) {
-            div.classList.add('possible-danger');
-            div.innerHTML += '<div class="cell-content">⚠️</div>';
-        } else {
-            div.classList.add('unknown');
-        }
-        
-        // Percepts
-        if (this.visited.has(coord)) {
-            let percepts = '';
-            if (cell.hasBreeze) percepts += '💨';
-            if (cell.hasStench) percepts += '💀';
-            if (cell.hasGlitter && !this.hasGold) percepts += '✨';
-            if (percepts) {
-                div.innerHTML += `<div class="percept-icons">${percepts}</div>`;
-            }
-        }
-        
-        // Agent
-        if (r === this.agentPos.row && c === this.agentPos.col) {
-            div.classList.add('agent');
-            if (this.hasGold) {
-                div.innerHTML += '<div style="position:absolute;top:5px;right:5px;font-size:20px;z-index:15">💰</div>';
-            }
-        }
-        
-        return div;
-    }
-
-    showStatus(msg, type) {
-        let banner = document.getElementById('statusBanner');
-        banner.className = 'status-banner ' + type;
-        banner.querySelector('.status-text').textContent = msg;
-        banner.classList.remove('hidden');
-    }
-
-    addLog(msg, type = "info") {
-        let log = document.getElementById('logContent');
-        let entry = document.createElement('div');
-        entry.className = `log-entry ${type}`;
-        entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-        log.appendChild(entry);
-        log.scrollTop = log.scrollHeight;
-        while (log.children.length > 100) log.removeChild(log.firstChild);
-    }
-
-    clearLog() {
-        document.getElementById('logContent').innerHTML = '';
-    }
-
-    reset() {
-        if (this.autoRunInterval) clearInterval(this.autoRunInterval);
-        
-        Object.assign(this, {
-            rows: 5, cols: 5, grid: [], agentPos: {row:0, col:0},
-            visited: new Set(), safe: new Set(), pits: new Set(),
-            wumpusPos: null, goldPos: null, hasGold: false,
-            gameOver: false, moveCount: 0, isRunning: false,
-            confirmedPits: new Set(), confirmedWumpus: new Set(),
-            possiblePits: new Set(), possibleWumpus: new Set()
-        });
-        
-        this.logic.reset();
-        
-        document.getElementById('gridContainer').innerHTML = '<div class="empty-state"><div class="empty-icon">🎮</div><h3>Ready!</h3><p>Click Initialize World</p></div>';
-        document.getElementById('stepBtn').disabled = true;
-        document.getElementById('autoBtn').disabled = true;
-        document.getElementById('statusBanner').classList.add('hidden');
-        
-        ['inferenceSteps','safeCells','confirmedPits','confirmedWumpus'].forEach(id => 
-            document.getElementById(id).textContent = '0'
-        );
-        document.getElementById('percepts').textContent = 'None';
-        document.getElementById('agentPos').textContent = '(0,0)';
-        document.getElementById('goldStatus').textContent = 'Not Found';
-        document.getElementById('explorationProgress').textContent = '0%';
-        document.getElementById('logContent').innerHTML = '';
-        
-        this.addLog("Reset complete", "info");
-    }
+  renderGrid();
+  setStatus(`New ${ROWS}×${COLS} grid. ${PIT_COUNT} pits hidden. Agent at (0,0).`, "info");
+  clearLog();
+  updateMetrics();
+  updateButtons(true);
+  stopAuto();
 }
 
-document.head.insertAdjacentHTML('beforeend', '<style>@keyframes fall{to{transform:translateY(100vh) rotate(720deg);opacity:0}}</style>');
-let world = new WumpusWorld();
+function buildGrid() {
+  grid = [];
+  for (let r = 0; r < ROWS; r++) {
+    grid[r] = [];
+    for (let c = 0; c < COLS; c++) {
+      grid[r][c] = {
+        row:r, col:c,
+        hasPit:false, hasWumpus:false, hasGold:false,
+        visited:false, safe:false, inferred:false,
+        percepts:{ breeze:false, stench:false, glitter:false }
+      };
+    }
+  }
+}
+
+function placeHazards() {
+  const forbidden = new Set(["0,0"]);
+
+  // Place pits
+  let placed = 0;
+  while (placed < PIT_COUNT) {
+    const r = randInt(0, ROWS-1), c = randInt(0, COLS-1);
+    const key = `${r},${c}`;
+    if (!forbidden.has(key)) {
+      grid[r][c].hasPit = true;
+      forbidden.add(key);
+      placed++;
+    }
+  }
+
+  // Place Wumpus
+  let wPlaced = false;
+  while (!wPlaced) {
+    const r = randInt(0, ROWS-1), c = randInt(0, COLS-1);
+    const key = `${r},${c}`;
+    if (!forbidden.has(key)) {
+      grid[r][c].hasWumpus = true;
+      forbidden.add(key);
+      wPlaced = true;
+    }
+  }
+
+  // Place Gold (not on agent start, not on same cell as hazards for clarity)
+  let gPlaced = false;
+  let attempts = 0;
+  while (!gPlaced && attempts < 50) {
+    const r = randInt(0, ROWS-1), c = randInt(0, COLS-1);
+    if (r !== 0 || c !== 0) { grid[r][c].hasGold = true; gPlaced = true; }
+    attempts++;
+  }
+}
+
+function computePercepts() {
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const cell = grid[r][c];
+      cell.percepts.glitter = cell.hasGold;
+      cell.percepts.breeze  = false;
+      cell.percepts.stench  = false;
+      for (const [nr, nc] of getNeighbors(r, c)) {
+        if (grid[nr][nc].hasPit)    cell.percepts.breeze = true;
+        if (grid[nr][nc].hasWumpus) cell.percepts.stench = true;
+      }
+    }
+  }
+}
+
+/* ════════════════════════════════════════
+   AGENT STEP
+   ════════════════════════════════════════ */
+function agentStep() {
+  if (gameOver) { stopAuto(); return; }
+
+  const cell = grid[agentRow][agentCol];
+
+  // Mark visited
+  if (!cell.visited) {
+    cell.visited = true;
+    cell.safe    = true;
+    agentSteps++;
+    tellKBPercepts(agentRow, agentCol);
+  }
+
+  // Check hazards
+  if (cell.hasPit) {
+    endGame("💀 Agent fell into a Pit! Game Over.", "danger");
+    return;
+  }
+  if (cell.hasWumpus) {
+    endGame("🦷 Agent eaten by Wumpus! Game Over.", "danger");
+    return;
+  }
+  if (cell.hasGold) {
+    goldCollected = true;
+    cell.hasGold  = false;
+    logMsg("🥇 Gold collected!", "info");
+    // Try to return home
+  }
+
+  // Infer safe cells around current position
+  inferSafeNeighbors(agentRow, agentCol);
+
+  // Choose next move
+  const next = chooseBestMove();
+  if (!next) {
+    endGame("🤔 Agent is stuck — no safe unvisited cell reachable.", "warn");
+    return;
+  }
+
+  logMsg(`Agent moves to (${next.r},${next.c})`, "step");
+  agentRow = next.r;
+  agentCol = next.c;
+
+  // If agent returns home after gold
+  if (goldCollected && agentRow === 0 && agentCol === 0) {
+    endGame("🏆 Agent returned home with the Gold! WIN!", "success");
+    return;
+  }
+
+  renderGrid();
+  updateMetrics();
+  updatePerceptDisplay();
+}
+
+/* ── Tell KB about percepts at (r,c) ── */
+function tellKBPercepts(r, c) {
+  const cell      = grid[r][c];
+  const neighbors = getNeighbors(r, c);
+  const label     = `${r}_${c}`;
+
+  // Breeze percept: B_r_c ⟺ ⋁ P_neighbors
+  if (cell.percepts.breeze) {
+    logMsg(`TELL: Breeze at (${r},${c})`, "info");
+    kb.tell(atom(`B_${label}`));
+    // B_r_c → P_n1 ∨ P_n2 ∨ ...
+    if (neighbors.length > 0) {
+      const pitOrs = neighbors.map(([nr,nc]) => atom(`P_${nr}_${nc}`));
+      kb.tell(implies(atom(`B_${label}`), or(...pitOrs)));
+      // Each pit neighbor → breeze at (r,c)
+      for (const [nr,nc] of neighbors) {
+        kb.tell(implies(atom(`P_${nr}_${nc}`), atom(`B_${label}`)));
+      }
+    }
+  } else {
+    // No breeze → no pit in any neighbor
+    logMsg(`TELL: No Breeze at (${r},${c}) → neighbors safe from pits`, "info");
+    kb.tell(neg(atom(`B_${label}`)));
+    for (const [nr,nc] of neighbors) {
+      kb.tell(neg(atom(`P_${nr}_${nc}`)));
+    }
+  }
+
+  // Stench percept: S_r_c ⟺ ⋁ W_neighbors
+  if (cell.percepts.stench) {
+    logMsg(`TELL: Stench at (${r},${c})`, "info");
+    kb.tell(atom(`S_${label}`));
+    if (neighbors.length > 0) {
+      const wumpusOrs = neighbors.map(([nr,nc]) => atom(`W_${nr}_${nc}`));
+      kb.tell(implies(atom(`S_${label}`), or(...wumpusOrs)));
+      for (const [nr,nc] of neighbors) {
+        kb.tell(implies(atom(`W_${nr}_${nc}`), atom(`S_${label}`)));
+      }
+    }
+  } else {
+    logMsg(`TELL: No Stench at (${r},${c}) → neighbors safe from Wumpus`, "info");
+    kb.tell(neg(atom(`S_${label}`)));
+    for (const [nr,nc] of neighbors) {
+      kb.tell(neg(atom(`W_${nr}_${nc}`)));
+    }
+  }
+
+  // Current cell is definitely safe (agent is here and alive)
+  kb.tell(neg(atom(`P_${r}_${c}`)));
+  kb.tell(neg(atom(`W_${r}_${c}`)));
+}
+
+/* ── Run Resolution on neighbors ── */
+function inferSafeNeighbors(r, c) {
+  for (const [nr, nc] of getNeighbors(r, c)) {
+    if (grid[nr][nc].visited) continue;
+    if (grid[nr][nc].inferred) continue;
+
+    const result = kb.askSafe(nr, nc);
+    for (const line of result.logLines) logMsg(line, "step");
+
+    if (result.proved) {
+      grid[nr][nc].inferred = true;
+      grid[nr][nc].safe     = true;
+      safeCellsProven++;
+      logMsg(`✅ (${nr},${nc}) proven safe by resolution`, "info");
+    }
+  }
+}
+
+/* ── Choose next move (BFS-based safe navigation) ──
+   Priority:
+   1. Unvisited & proven-safe adjacent cell
+   2. Unvisited & proven-safe reachable cell (BFS through visited cells)
+   3. Return home if gold collected
+*/
+function chooseBestMove() {
+  // 1. Adjacent proven-safe unvisited
+  for (const [nr, nc] of getNeighbors(agentRow, agentCol)) {
+    if (!grid[nr][nc].visited && grid[nr][nc].inferred) {
+      return { r:nr, c:nc };
+    }
+  }
+
+  // 2. BFS through visited cells to find a safe unvisited frontier
+  const visited  = new Set();
+  const queue    = [{ r:agentRow, c:agentCol, path:[] }];
+  const key      = (r,c) => `${r},${c}`;
+
+  while (queue.length > 0) {
+    const { r, c, path } = queue.shift();
+    if (visited.has(key(r,c))) continue;
+    visited.add(key(r,c));
+
+    for (const [nr,nc] of getNeighbors(r,c)) {
+      if (visited.has(key(nr,nc))) continue;
+
+      if (!grid[nr][nc].visited && grid[nr][nc].inferred) {
+        // Found safe unvisited cell; return the first step of the path
+        if (path.length === 0) return { r:nr, c:nc };
+        return path[0];
+      }
+      if (grid[nr][nc].visited) {
+        queue.push({ r:nr, c:nc, path: path.length===0 ? [{r:nr,c:nc}] : path });
+      }
+    }
+  }
+
+  // 3. If gold collected, try to go home via BFS
+  if (goldCollected) {
+    const homePath = bfsPath(agentRow, agentCol, 0, 0);
+    if (homePath && homePath.length > 0) return homePath[0];
+  }
+
+  return null;
+}
+
+/* BFS to find path through visited cells */
+function bfsPath(sr, sc, tr, tc) {
+  const visited = new Set();
+  const queue   = [{ r:sr, c:sc, path:[] }];
+  const key     = (r,c) => `${r},${c}`;
+
+  while (queue.length > 0) {
+    const { r, c, path } = queue.shift();
+    if (r === tr && c === tc) return path;
+    if (visited.has(key(r,c))) continue;
+    visited.add(key(r,c));
+
+    for (const [nr,nc] of getNeighbors(r,c)) {
+      if (!visited.has(key(nr,nc)) && (grid[nr][nc].visited || (nr===tr&&nc===tc))) {
+        queue.push({ r:nr, c:nc, path:[...path, {r:nr,c:nc}] });
+      }
+    }
+  }
+  return null;
+}
+
+/* ════════════════════════════════════════
+   RENDERING
+   ════════════════════════════════════════ */
+function renderGrid() {
+  gridContainer.style.gridTemplateColumns = `repeat(${COLS}, 1fr)`;
+  gridContainer.innerHTML = "";
+
+  // Render rows bottom-to-top so (0,0) appears bottom-left
+  for (let r = ROWS-1; r >= 0; r--) {
+    for (let c = 0; c < COLS; c++) {
+      const cell = grid[r][c];
+      const div  = document.createElement("div");
+      div.classList.add("cell");
+
+      // Determine state
+      const isAgent = r === agentRow && c === agentCol && agentAlive;
+      let state;
+      if (isAgent)                         state = "agent";
+      else if (r===0&&c===0&&!cell.visited) state = "start";
+      else if (cell.visited)               state = "safe";
+      else if (cell.inferred)              state = "frontier";
+      else                                 state = "unknown";
+
+      div.classList.add(`state-${state}`);
+
+      // Coord label
+      const coordLabel = document.createElement("span");
+      coordLabel.className = "cell-coord";
+      coordLabel.textContent = `${r},${c}`;
+      div.appendChild(coordLabel);
+
+      // Determine icon
+      let icon = "";
+      if (isAgent)                       icon = "🤖";
+      else if (!cell.visited && cell.hasGold && gameOver)  icon = "💰";
+      else if (!cell.visited && cell.hasPit && gameOver)   icon = "🕳️";
+      else if (!cell.visited && cell.hasWumpus && gameOver) icon = "👾";
+      else if (cell.visited && cell.percepts.glitter)      icon = "💰";
+      else if (state === "start")        icon = "🏠";
+      else if (state === "safe")         icon = "✅";
+      else if (state === "frontier")     icon = "🔍";
+      else                               icon = "";
+
+      const iconEl = document.createElement("span");
+      iconEl.className = "cell-icon";
+      iconEl.textContent = icon;
+      div.appendChild(iconEl);
+
+      // Percept badges (only for visited cells)
+      if (cell.visited || isAgent) {
+        const badgeRow = document.createElement("div");
+        badgeRow.className = "cell-percepts";
+        if (cell.percepts.breeze) {
+          const b = document.createElement("span");
+          b.className = "percept-badge pb-breeze";
+          b.textContent = "BRZ";
+          badgeRow.appendChild(b);
+        }
+        if (cell.percepts.stench) {
+          const s = document.createElement("span");
+          s.className = "percept-badge pb-stench";
+          s.textContent = "STN";
+          badgeRow.appendChild(s);
+        }
+        if (cell.percepts.glitter) {
+          const g = document.createElement("span");
+          g.className = "percept-badge pb-glitter";
+          g.textContent = "GLT";
+          badgeRow.appendChild(g);
+        }
+        if (badgeRow.children.length > 0) div.appendChild(badgeRow);
+      }
+
+      // Tooltip
+      div.title = buildTooltip(r, c);
+
+      gridContainer.appendChild(div);
+    }
+  }
+}
+
+function buildTooltip(r, c) {
+  const cell = grid[r][c];
+  let t = `Cell (${r},${c})\n`;
+  t += `Visited: ${cell.visited}\n`;
+  t += `Safe(proven): ${cell.inferred}\n`;
+  if (cell.visited) {
+    t += `Breeze: ${cell.percepts.breeze}\n`;
+    t += `Stench: ${cell.percepts.stench}\n`;
+  }
+  if (gameOver) {
+    t += `Pit: ${cell.hasPit}\n`;
+    t += `Wumpus: ${cell.hasWumpus}\n`;
+    t += `Gold: ${cell.hasGold}\n`;
+  }
+  return t;
+}
+
+/* ════════════════════════════════════════
+   GAME OVER
+   ════════════════════════════════════════ */
+function endGame(msg, type) {
+  gameOver   = true;
+  agentAlive = (type === "success");
+  stopAuto();
+
+  // Reveal the world
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (grid[r][c].hasPit || grid[r][c].hasWumpus) {
+        grid[r][c].inferred = false;
+        grid[r][c].safe     = false;
+      }
+    }
+  }
+  renderGrid();
+
+  setStatus(msg, type);
+  metricResult.textContent = type === "success" ? "WIN 🏆" : type === "warn" ? "STUCK" : "LOST 💀";
+  metricResult.style.color = type === "success" ? "#3fb950" : type === "warn" ? "#d29922" : "#f85149";
+  updateButtons(false);
+  updateMetrics();
+  logMsg(msg, type === "success" ? "info" : "error");
+  updateKBViewer();
+}
+
+/* ════════════════════════════════════════
+   UI HELPERS
+   ════════════════════════════════════════ */
+function setStatus(msg, type = "info") {
+  statusBox.innerHTML = `<b>${msg}</b>`;
+  statusBox.style.borderColor = type==="info"    ? "var(--accent2)"
+                               : type==="danger" ? "var(--danger)"
+                               : type==="warn"   ? "var(--warning)"
+                               : type==="success"? "gold"
+                               : "var(--border)";
+}
+
+function logMsg(msg, type = "") {
+  const p = document.createElement("p");
+  p.textContent = msg;
+  if (type) p.classList.add(type);
+  kbLog.appendChild(p);
+  kbLog.scrollTop = kbLog.scrollHeight;
+}
+
+function clearLog() {
+  kbLog.innerHTML = "";
+}
+
+function updateMetrics() {
+  metricInference.textContent = kb.getInferenceSteps();
+  metricVisited.textContent   = countVisited();
+  metricSafe.textContent      = safeCellsProven;
+  metricSteps.textContent     = agentSteps;
+  metricClauses.textContent   = kb.getClauseCount();
+}
+
+function updatePerceptDisplay() {
+  if (!agentAlive || gameOver) { perceptDisplay.textContent = "—"; return; }
+  const cell = grid[agentRow][agentCol];
+  const parts = [];
+  if (cell.percepts.breeze)  parts.push("💨 Breeze");
+  if (cell.percepts.stench)  parts.push("💀 Stench");
+  if (cell.percepts.glitter) parts.push("✨ Glitter");
+  perceptDisplay.textContent = parts.length ? parts.join(" | ") : "None";
+}
+
+function updateKBViewer() {
+  kbViewer.innerHTML = "";
+  for (const clause of kb.getClauses()) {
+    const p = document.createElement("p");
+    p.textContent = clauseStr(clause);
+    kbViewer.appendChild(p);
+  }
+  kbViewer.scrollTop = 0;
+}
+
+function countVisited() {
+  let n = 0;
+  for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++) if(grid[r][c].visited) n++;
+  return n;
+}
+
+function updateButtons(active) {
+  btnStep.disabled  = !active;
+  btnAuto.disabled  = !active;
+  btnReset.disabled = !active;
+  btnStop.disabled  = true;
+}
+
+function startAuto() {
+  if (autoTimer) return;
+  const speed = clamp(parseInt(speedInput.value) || 800, 200, 3000);
+  btnAuto.disabled = true;
+  btnStop.disabled = false;
+  autoTimer = setInterval(() => {
+    agentStep();
+    updateKBViewer();
+    if (gameOver) stopAuto();
+  }, speed);
+}
+
+function stopAuto() {
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+  if (!gameOver) {
+    btnAuto.disabled = false;
+    btnStop.disabled = true;
+  }
+}
+
+/* ════════════════════════════════════════
+   UTILITY
+   ════════════════════════════════════════ */
+function getNeighbors(r, c) {
+  const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+  return dirs
+    .map(([dr,dc]) => [r+dr, c+dc])
+    .filter(([nr,nc]) => nr>=0 && nr<ROWS && nc>=0 && nc<COLS);
+}
+
+function randInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function clamp(val, min, max) {
+  return Math.max(min, Math.min(max, val));
+}
+
+/* ════════════════════════════════════════
+   FIRST STEP: visit (0,0) on game start
+   ════════════════════════════════════════ */
+function firstVisit() {
+  const cell = grid[0][0];
+  cell.visited = true;
+  cell.safe    = true;
+  agentSteps++;
+  tellKBPercepts(0, 0);
+  inferSafeNeighbors(0, 0);
+  renderGrid();
+  updateMetrics();
+  updatePerceptDisplay();
+  updateKBViewer();
+  setStatus(`Agent at (0,0). ${cell.percepts.breeze?"💨 Breeze! ":""}${cell.percepts.stench?"💀 Stench! ":""}${cell.percepts.glitter?"✨ Glitter! ":""}Ready to explore.`, "info");
+}
+
+/* ════════════════════════════════════════
+   EVENT LISTENERS
+   ════════════════════════════════════════ */
+btnNew.addEventListener("click", () => {
+  initGame();
+  firstVisit();
+});
+
+btnStep.addEventListener("click", () => {
+  if (gameOver) return;
+  agentStep();
+  updateKBViewer();
+});
+
+btnAuto.addEventListener("click", startAuto);
+btnStop.addEventListener("click", stopAuto);
+
+btnReset.addEventListener("click", () => {
+  stopAuto();
+  initGame();
+  firstVisit();
+});
+
+/* ── Keyboard shortcuts ── */
+document.addEventListener("keydown", e => {
+  if (e.key === "n" || e.key === "N") btnNew.click();
+  if (e.key === "s" || e.key === "S") { if (!btnStep.disabled) btnStep.click(); }
+  if (e.key === "a" || e.key === "A") { if (!btnAuto.disabled) btnAuto.click(); }
+  if (e.key === "Escape")             btnStop.click();
+});
