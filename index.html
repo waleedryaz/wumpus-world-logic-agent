@@ -3,110 +3,236 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wumpus World Logic Agent</title>
+    <title>🎯 AI Wumpus World Explorer</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+    <div class="background-animation"></div>
+    
     <div class="container">
-        <h1>🎯 Wumpus World - Knowledge-Based Agent</h1>
-        
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <span class="logo-icon">🤖</span>
+                <h1>AI Wumpus World Explorer</h1>
+            </div>
+            <p class="subtitle">Knowledge-Based Agent using Resolution Refutation</p>
+        </header>
+
         <!-- Control Panel -->
         <div class="control-panel">
-            <div class="input-group">
-                <label>Rows:</label>
-                <input type="number" id="rows" value="4" min="3" max="8">
+            <div class="config-section">
+                <h3>🎮 Game Configuration</h3>
+                <div class="input-row">
+                    <div class="input-group">
+                        <label>Rows:</label>
+                        <input type="number" id="rows" value="5" min="4" max="8">
+                    </div>
+                    <div class="input-group">
+                        <label>Columns:</label>
+                        <input type="number" id="cols" value="5" min="4" max="8">
+                    </div>
+                    <div class="input-group checkbox-group">
+                        <input type="checkbox" id="debugMode">
+                        <label for="debugMode">🔍 Debug Mode (Show Hazards)</label>
+                    </div>
+                </div>
             </div>
-            <div class="input-group">
-                <label>Columns:</label>
-                <input type="number" id="cols" value="4" min="3" max="8">
+            
+            <div class="button-section">
+                <button id="initBtn" class="btn btn-primary">
+                    <span class="btn-icon">🎲</span> Initialize World
+                </button>
+                <button id="stepBtn" class="btn btn-secondary" disabled>
+                    <span class="btn-icon">👣</span> Next Step
+                </button>
+                <button id="autoBtn" class="btn btn-success" disabled>
+                    <span class="btn-icon">▶️</span> Auto Run
+                </button>
+                <button id="resetBtn" class="btn btn-danger">
+                    <span class="btn-icon">🔄</span> Reset
+                </button>
             </div>
-            <button id="initBtn" class="btn btn-primary">Initialize Grid</button>
-            <button id="stepBtn" class="btn btn-secondary" disabled>Next Step</button>
-            <button id="autoBtn" class="btn btn-success" disabled>Auto Run</button>
-            <button id="resetBtn" class="btn btn-danger">Reset</button>
+        </div>
+
+        <!-- Status Banner -->
+        <div id="statusBanner" class="status-banner hidden">
+            <div class="status-content">
+                <span class="status-icon">🎉</span>
+                <span class="status-text"></span>
+            </div>
         </div>
 
         <!-- Metrics Dashboard -->
-        <div class="metrics">
-            <div class="metric-card">
-                <h3>Inference Steps</h3>
-                <div id="inferenceSteps" class="metric-value">0</div>
+        <div class="metrics-dashboard">
+            <div class="metric-card metric-primary">
+                <div class="metric-icon">🧠</div>
+                <div class="metric-info">
+                    <h3>Inference Steps</h3>
+                    <div id="inferenceSteps" class="metric-value">0</div>
+                </div>
             </div>
-            <div class="metric-card">
-                <h3>Current Percepts</h3>
-                <div id="percepts" class="metric-value">None</div>
+            
+            <div class="metric-card metric-percept">
+                <div class="metric-icon">👃</div>
+                <div class="metric-info">
+                    <h3>Current Percepts</h3>
+                    <div id="percepts" class="metric-value">None</div>
+                </div>
             </div>
-            <div class="metric-card">
-                <h3>Agent Position</h3>
-                <div id="agentPos" class="metric-value">(0, 0)</div>
+            
+            <div class="metric-card metric-position">
+                <div class="metric-icon">📍</div>
+                <div class="metric-info">
+                    <h3>Agent Position</h3>
+                    <div id="agentPos" class="metric-value">(0, 0)</div>
+                </div>
             </div>
-            <div class="metric-card">
-                <h3>Safe Cells Found</h3>
-                <div id="safeCells" class="metric-value">0</div>
+            
+            <div class="metric-card metric-safe">
+                <div class="metric-icon">✅</div>
+                <div class="metric-info">
+                    <h3>Safe Cells</h3>
+                    <div id="safeCells" class="metric-value">0</div>
+                </div>
             </div>
-            <div class="metric-card danger-pit">
-                <h3>🕳️ Confirmed Pits</h3>
-                <div id="confirmedPits" class="metric-value">0</div>
+            
+            <div class="metric-card metric-pit">
+                <div class="metric-icon">🕳️</div>
+                <div class="metric-info">
+                    <h3>Confirmed Pits</h3>
+                    <div id="confirmedPits" class="metric-value">0</div>
+                </div>
             </div>
-            <div class="metric-card danger-wumpus">
-                <h3>👹 Confirmed Wumpus</h3>
-                <div id="confirmedWumpus" class="metric-value">0</div>
+            
+            <div class="metric-card metric-wumpus">
+                <div class="metric-icon">👹</div>
+                <div class="metric-info">
+                    <h3>Confirmed Wumpus</h3>
+                    <div id="confirmedWumpus" class="metric-value">0</div>
+                </div>
+            </div>
+
+            <div class="metric-card metric-gold">
+                <div class="metric-icon">🏆</div>
+                <div class="metric-info">
+                    <h3>Gold Status</h3>
+                    <div id="goldStatus" class="metric-value">Not Found</div>
+                </div>
+            </div>
+
+            <div class="metric-card metric-progress">
+                <div class="metric-icon">📊</div>
+                <div class="metric-info">
+                    <h3>Exploration</h3>
+                    <div id="explorationProgress" class="metric-value">0%</div>
+                </div>
             </div>
         </div>
 
         <!-- Grid Container -->
-        <div id="gridContainer" class="grid-container">
-            <p style="text-align:center;color:#999;">Initialize grid to start</p>
+        <div class="grid-section">
+            <div class="grid-header">
+                <h2>🗺️ World Map</h2>
+                <div class="grid-stats">
+                    <span id="gridSize">0x0</span>
+                    <span class="separator">•</span>
+                    <span id="cellsExplored">0/0 explored</span>
+                </div>
+            </div>
+            <div id="gridContainer" class="grid-container">
+                <div class="empty-state">
+                    <div class="empty-icon">🎮</div>
+                    <h3>Ready to Explore!</h3>
+                    <p>Configure the grid settings and click "Initialize World" to begin</p>
+                </div>
+            </div>
         </div>
 
-        <!-- Knowledge Base Display -->
-        <div class="kb-display">
-            <h3>📚 Knowledge Base (Recent Clauses)</h3>
-            <div id="kbContent" class="kb-content">
-                Waiting for initialization...
+        <!-- Two Column Layout -->
+        <div class="info-grid">
+            <!-- Knowledge Base -->
+            <div class="info-panel kb-panel">
+                <div class="panel-header">
+                    <h3>📚 Knowledge Base</h3>
+                    <span class="panel-badge" id="kbSize">0 clauses</span>
+                </div>
+                <div id="kbContent" class="panel-content">
+                    <div class="empty-state-small">
+                        <p>Waiting for initialization...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Agent Log -->
+            <div class="info-panel log-panel">
+                <div class="panel-header">
+                    <h3>📋 Agent Activity Log</h3>
+                    <button id="clearLog" class="btn-mini">Clear</button>
+                </div>
+                <div id="logContent" class="panel-content log-content"></div>
             </div>
         </div>
 
         <!-- Legend -->
-        <div class="legend">
-            <h3>Legend:</h3>
-            <div class="legend-items">
+        <div class="legend-section">
+            <h3>📖 Legend</h3>
+            <div class="legend-grid">
                 <div class="legend-item">
-                    <div class="legend-box agent"></div>
-                    <span>Agent (Current Position)</span>
+                    <div class="legend-box legend-agent">🤖</div>
+                    <span>Agent</span>
                 </div>
                 <div class="legend-item">
-                    <div class="legend-box safe"></div>
-                    <span>Safe (Visited/Proven)</span>
+                    <div class="legend-box legend-safe"></div>
+                    <span>Safe (Visited)</span>
                 </div>
                 <div class="legend-item">
-                    <div class="legend-box unknown"></div>
-                    <span>Unknown (Unexplored)</span>
+                    <div class="legend-box legend-unknown"></div>
+                    <span>Unknown</span>
                 </div>
                 <div class="legend-item">
-                    <div class="legend-box pit"></div>
-                    <span>Confirmed Pit (Proven Danger)</span>
+                    <div class="legend-box legend-possible">⚠️</div>
+                    <span>Possible Danger</span>
                 </div>
                 <div class="legend-item">
-                    <div class="legend-box wumpus"></div>
-                    <span>Confirmed Wumpus (Proven Danger)</span>
+                    <div class="legend-box legend-pit">🕳️</div>
+                    <span>Confirmed Pit</span>
                 </div>
                 <div class="legend-item">
-                    <span style="font-size: 24px;">💨</span>
-                    <span>Breeze (Pit Nearby)</span>
+                    <div class="legend-box legend-wumpus">👹</div>
+                    <span>Confirmed Wumpus</span>
                 </div>
                 <div class="legend-item">
-                    <span style="font-size: 24px;">💀</span>
-                    <span>Stench (Wumpus Nearby)</span>
+                    <div class="legend-box legend-gold">💰</div>
+                    <span>Gold</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-percept">💨</span>
+                    <span>Breeze</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-percept">💀</span>
+                    <span>Stench</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-percept">✨</span>
+                    <span>Glitter</span>
                 </div>
             </div>
         </div>
 
-        <!-- Log Display -->
-        <div class="log-display">
-            <h3>📋 Agent Log</h3>
-            <div id="logContent" class="log-content"></div>
-        </div>
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Built with ❤️ </p>
+            <p class="footer-links">
+                <a href="#" id="githubLink">GitHub</a> • 
+                <a href="#" id="linkedinLink">LinkedIn</a> • 
+                <a href="#" id="vercelLink">Live Demo</a>
+            </p>
+        </footer>
     </div>
 
     <script src="logic.js"></script>
