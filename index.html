@@ -1,241 +1,128 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🎯 AI Wumpus World Explorer</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Wumpus World – Dynamic Logic Agent</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-    <div class="background-animation"></div>
-    
-    <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <div class="logo">
-                <span class="logo-icon">🤖</span>
-                <h1>AI Wumpus World Explorer</h1>
-            </div>
-            <p class="subtitle">Knowledge-Based Agent using Resolution Refutation</p>
-        </header>
 
-        <!-- Control Panel -->
-        <div class="control-panel">
-            <div class="config-section">
-                <h3>🎮 Game Configuration</h3>
-                <div class="input-row">
-                    <div class="input-group">
-                        <label>Rows:</label>
-                        <input type="number" id="rows" value="5" min="4" max="8">
-                    </div>
-                    <div class="input-group">
-                        <label>Columns:</label>
-                        <input type="number" id="cols" value="5" min="4" max="8">
-                    </div>
-                    <div class="input-group checkbox-group">
-                        <input type="checkbox" id="debugMode">
-                        <label for="debugMode">🔍 Debug Mode (Show Hazards)</label>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="button-section">
-                <button id="initBtn" class="btn btn-primary">
-                    <span class="btn-icon">🎲</span> Initialize World
-                </button>
-                <button id="stepBtn" class="btn btn-secondary" disabled>
-                    <span class="btn-icon">👣</span> Next Step
-                </button>
-                <button id="autoBtn" class="btn btn-success" disabled>
-                    <span class="btn-icon">▶️</span> Auto Run
-                </button>
-                <button id="resetBtn" class="btn btn-danger">
-                    <span class="btn-icon">🔄</span> Reset
-                </button>
-            </div>
-        </div>
-
-        <!-- Status Banner -->
-        <div id="statusBanner" class="status-banner hidden">
-            <div class="status-content">
-                <span class="status-icon">🎉</span>
-                <span class="status-text"></span>
-            </div>
-        </div>
-
-        <!-- Metrics Dashboard -->
-        <div class="metrics-dashboard">
-            <div class="metric-card metric-primary">
-                <div class="metric-icon">🧠</div>
-                <div class="metric-info">
-                    <h3>Inference Steps</h3>
-                    <div id="inferenceSteps" class="metric-value">0</div>
-                </div>
-            </div>
-            
-            <div class="metric-card metric-percept">
-                <div class="metric-icon">👃</div>
-                <div class="metric-info">
-                    <h3>Current Percepts</h3>
-                    <div id="percepts" class="metric-value">None</div>
-                </div>
-            </div>
-            
-            <div class="metric-card metric-position">
-                <div class="metric-icon">📍</div>
-                <div class="metric-info">
-                    <h3>Agent Position</h3>
-                    <div id="agentPos" class="metric-value">(0, 0)</div>
-                </div>
-            </div>
-            
-            <div class="metric-card metric-safe">
-                <div class="metric-icon">✅</div>
-                <div class="metric-info">
-                    <h3>Safe Cells</h3>
-                    <div id="safeCells" class="metric-value">0</div>
-                </div>
-            </div>
-            
-            <div class="metric-card metric-pit">
-                <div class="metric-icon">🕳️</div>
-                <div class="metric-info">
-                    <h3>Confirmed Pits</h3>
-                    <div id="confirmedPits" class="metric-value">0</div>
-                </div>
-            </div>
-            
-            <div class="metric-card metric-wumpus">
-                <div class="metric-icon">👹</div>
-                <div class="metric-info">
-                    <h3>Confirmed Wumpus</h3>
-                    <div id="confirmedWumpus" class="metric-value">0</div>
-                </div>
-            </div>
-
-            <div class="metric-card metric-gold">
-                <div class="metric-icon">🏆</div>
-                <div class="metric-info">
-                    <h3>Gold Status</h3>
-                    <div id="goldStatus" class="metric-value">Not Found</div>
-                </div>
-            </div>
-
-            <div class="metric-card metric-progress">
-                <div class="metric-icon">📊</div>
-                <div class="metric-info">
-                    <h3>Exploration</h3>
-                    <div id="explorationProgress" class="metric-value">0%</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Grid Container -->
-        <div class="grid-section">
-            <div class="grid-header">
-                <h2>🗺️ World Map</h2>
-                <div class="grid-stats">
-                    <span id="gridSize">0x0</span>
-                    <span class="separator">•</span>
-                    <span id="cellsExplored">0/0 explored</span>
-                </div>
-            </div>
-            <div id="gridContainer" class="grid-container">
-                <div class="empty-state">
-                    <div class="empty-icon">🎮</div>
-                    <h3>Ready to Explore!</h3>
-                    <p>Configure the grid settings and click "Initialize World" to begin</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Two Column Layout -->
-        <div class="info-grid">
-            <!-- Knowledge Base -->
-            <div class="info-panel kb-panel">
-                <div class="panel-header">
-                    <h3>📚 Knowledge Base</h3>
-                    <span class="panel-badge" id="kbSize">0 clauses</span>
-                </div>
-                <div id="kbContent" class="panel-content">
-                    <div class="empty-state-small">
-                        <p>Waiting for initialization...</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Agent Log -->
-            <div class="info-panel log-panel">
-                <div class="panel-header">
-                    <h3>📋 Agent Activity Log</h3>
-                    <button id="clearLog" class="btn-mini">Clear</button>
-                </div>
-                <div id="logContent" class="panel-content log-content"></div>
-            </div>
-        </div>
-
-        <!-- Legend -->
-        <div class="legend-section">
-            <h3>📖 Legend</h3>
-            <div class="legend-grid">
-                <div class="legend-item">
-                    <div class="legend-box legend-agent">🤖</div>
-                    <span>Agent</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-box legend-safe"></div>
-                    <span>Safe (Visited)</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-box legend-unknown"></div>
-                    <span>Unknown</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-box legend-possible">⚠️</div>
-                    <span>Possible Danger</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-box legend-pit">🕳️</div>
-                    <span>Confirmed Pit</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-box legend-wumpus">👹</div>
-                    <span>Confirmed Wumpus</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-box legend-gold">💰</div>
-                    <span>Gold</span>
-                </div>
-                <div class="legend-item">
-                    <span class="legend-percept">💨</span>
-                    <span>Breeze</span>
-                </div>
-                <div class="legend-item">
-                    <span class="legend-percept">💀</span>
-                    <span>Stench</span>
-                </div>
-                <div class="legend-item">
-                    <span class="legend-percept">✨</span>
-                    <span>Glitter</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Footer -->
-        <footer class="footer">
-            <p>Built with ❤️ </p>
-            <p class="footer-links">
-                <a href="#" id="githubLink">GitHub</a> • 
-                <a href="#" id="linkedinLink">LinkedIn</a> • 
-                <a href="#" id="vercelLink">Live Demo</a>
-            </p>
-        </footer>
+  <!-- ===== HEADER ===== -->
+  <header>
+    <div class="header-inner">
+      <div class="logo">🧠 Wumpus World</div>
+      <div class="subtitle">Knowledge-Based Agent · Propositional Logic · Resolution Refutation</div>
     </div>
+  </header>
 
-    <script src="logic.js"></script>
-    <script src="script.js"></script>
+  <!-- ===== MAIN LAYOUT ===== -->
+  <main>
+
+    <!-- LEFT PANEL: Controls -->
+    <aside class="panel left-panel">
+      <h2>⚙️ Configuration</h2>
+
+      <div class="form-group">
+        <label for="rowsInput">Grid Rows (3–8)</label>
+        <input type="number" id="rowsInput" min="3" max="8" value="4" />
+      </div>
+
+      <div class="form-group">
+        <label for="colsInput">Grid Columns (3–8)</label>
+        <input type="number" id="colsInput" min="3" max="8" value="4" />
+      </div>
+
+      <div class="form-group">
+        <label for="pitCountInput">Number of Pits</label>
+        <input type="number" id="pitCountInput" min="1" max="6" value="3" />
+      </div>
+
+      <div class="form-group">
+        <label for="speedInput">Auto-Step Speed (ms)</label>
+        <input type="number" id="speedInput" min="200" max="3000" value="800" />
+      </div>
+
+      <div class="btn-group">
+        <button id="btnNew"    class="btn btn-primary">🆕 New Game</button>
+        <button id="btnStep"   class="btn btn-secondary" disabled>👣 Step</button>
+        <button id="btnAuto"   class="btn btn-secondary" disabled>▶ Auto Run</button>
+        <button id="btnStop"   class="btn btn-danger"    disabled>⏹ Stop</button>
+        <button id="btnReset"  class="btn btn-warning"   disabled>🔄 Reset Episode</button>
+      </div>
+
+      <!-- Legend -->
+      <h2 style="margin-top:28px">🗺️ Legend</h2>
+      <div class="legend">
+        <div class="legend-item"><span class="leg-box agent"></span>Agent</div>
+        <div class="legend-item"><span class="leg-box safe"></span>Safe / Visited</div>
+        <div class="legend-item"><span class="leg-box frontier"></span>KB-Safe Frontier</div>
+        <div class="legend-item"><span class="leg-box unknown"></span>Unknown</div>
+        <div class="legend-item"><span class="leg-box danger"></span>Confirmed Danger</div>
+        <div class="legend-item"><span class="leg-box start"></span>Start (1,1)</div>
+        <div class="legend-item"><span class="leg-box gold"></span>Gold</div>
+      </div>
+
+      <!-- Status -->
+      <h2 style="margin-top:28px">📋 Status</h2>
+      <div id="statusBox" class="status-box">Press <b>New Game</b> to begin.</div>
+    </aside>
+
+    <!-- CENTER: Grid -->
+    <section class="center-panel">
+      <div id="gridWrapper">
+        <div id="gridContainer"></div>
+      </div>
+
+      <!-- Percepts bar -->
+      <div class="percept-bar">
+        <span class="percept-label">Current Percepts:</span>
+        <span id="perceptDisplay" class="percept-value">—</span>
+      </div>
+    </section>
+
+    <!-- RIGHT PANEL: Metrics + KB Log -->
+    <aside class="panel right-panel">
+      <h2>📊 Metrics Dashboard</h2>
+
+      <div class="metric-card">
+        <div class="metric-title">Inference Steps</div>
+        <div class="metric-value" id="metricInference">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Cells Visited</div>
+        <div class="metric-value" id="metricVisited">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Safe Cells Proven</div>
+        <div class="metric-value" id="metricSafe">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Agent Steps</div>
+        <div class="metric-value" id="metricSteps">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">KB Clauses</div>
+        <div class="metric-value" id="metricClauses">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Episode Result</div>
+        <div class="metric-value" id="metricResult">—</div>
+      </div>
+
+      <!-- KB Log -->
+      <h2 style="margin-top:20px">🔍 Resolution Log</h2>
+      <div id="kbLog" class="kb-log"></div>
+
+      <!-- KB Clauses viewer -->
+      <h2 style="margin-top:16px">📚 Knowledge Base</h2>
+      <div id="kbViewer" class="kb-log"></div>
+    </aside>
+
+  </main>
+
+  <!-- ===== SCRIPTS ===== -->
+  <script src="logic.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>
